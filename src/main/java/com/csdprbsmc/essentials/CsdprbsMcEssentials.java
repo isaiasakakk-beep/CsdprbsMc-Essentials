@@ -38,6 +38,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, String> pendingClanColorPart = new HashMap<>();
     private static final String SELL_SELECT = "§8§lSELECIONE O ITEM PARA VENDER";
     private static final String SELL_CONFIRM = "§8§lCONFIRMAR VENDA";
+    private static final String SELL_QUANTITY = "§8§lESCOLHA A QUANTIDADE";
     private static final String CLAN_COLORS = "§8§lCORES DO CLAN";
     private static final String MISSIONS = "§8§lMISSÕES E RECOMPENSAS";
 
@@ -508,7 +509,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || event.getClickedInventory() != event.getView().getTopInventory()) return;
 
         String title = plain(event.getView().getTitle());
-        boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM))
+        boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
@@ -524,7 +525,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String name = plain(item.getItemMeta().getDisplayName());
 
         if (name.equals(plain(BACK_BUTTON))) {
-            if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM))) { pendingSale.remove(p.getUniqueId()); openShop(p); }
+            if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
@@ -545,7 +546,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
-            if (event.getSlot() < 45 && item != null && !item.getType().isAir()) openSellConfirmation(p, item);
+            if (event.getSlot() < 45 && item != null && !item.getType().isAir()) openSellQuantity(p, item);
+        } else if (title.equals(plain(SELL_QUANTITY))) {
+            ItemStack selected = pendingSale.get(p.getUniqueId());
+            if (selected != null) {
+                int amount = selected.getAmount();
+                if (name.startsWith("QUANTIDADE: ")) {
+                    try { amount = Math.min(Integer.parseInt(name.substring(12)), selected.getAmount()); } catch (NumberFormatException ignored) { }
+                } else if (name.startsWith("TUDO: ")) amount = selected.getAmount();
+                else { openSellSelection(p); return; }
+                selected.setAmount(amount);
+                pendingSale.put(p.getUniqueId(), selected);
+                openSellConfirmation(p, selected);
+            }
         } else if (title.equals(plain(SELL_CONFIRM))) {
             if (name.equals("CONFIRMAR VENDA")) confirmSale(p);
             else if (name.equals("CANCELAR")) { pendingSale.remove(p.getUniqueId()); openSellSelection(p); }
@@ -619,7 +632,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -815,6 +828,20 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         if (slot == 0) msg(p, "Você não possui itens aceitos pela loja.");
+        p.openInventory(inv);
+    }
+
+    private void openSellQuantity(Player p, ItemStack chosen) {
+        pendingSale.put(p.getUniqueId(), chosen.clone());
+        Inventory inv = Bukkit.createInventory(null, 27, SELL_QUANTITY);
+        int[] amounts = {1, 16, 32, 64};
+        int[] slots = {10, 12, 14, 16};
+        for (int i = 0; i < amounts.length; i++) {
+            int amount = Math.min(amounts[i], chosen.getAmount());
+            inv.setItem(slots[i], button(Material.PAPER, "§e§lQUANTIDADE: " + amount));
+        }
+        inv.setItem(22, button(Material.EMERALD, "§a§lTUDO: " + chosen.getAmount()));
+        inv.setItem(26, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
 
