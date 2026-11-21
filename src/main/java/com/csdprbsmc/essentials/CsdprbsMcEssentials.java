@@ -28,6 +28,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, UUID> tpa = new HashMap<>();
     private final Map<UUID, Long> tpaCreated = new HashMap<>();
     private final Map<UUID, String> tagCache = new ConcurrentHashMap<>();
+    private final Map<UUID, String> selectedHomes = new HashMap<>();
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -38,6 +39,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String CLANS = "§e§lCLANS";
     private static final String TPA_MENU = "§6§lTPA - JOGADORES";
     private static final String HOME_MENU = "§6§lMINHAS HOMES";
+    private static final String HOME_ACTION_MENU = "§6§lGERENCIAR HOME";
+    private static final String TPA_REQUEST_MENU = "§6§lPEDIDOS TPA";
+    private static final String SHOP_SELL_HAND = "§a§lVENDER ITEM NA MÃO";
+    private static final String SHOP_SELL_ALL = "§a§lVENDER ITENS DO INVENTÁRIO";
     private static final String WARP_MENU = "§6§lWARPS";
     private static final String SHOP_CATEGORIES = "§e§lLOJA - CATEGORIAS";
     private static final String SHOP_CATEGORY_PREFIX = "§e§lLOJA: ";
@@ -406,12 +411,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
-        if (isBedrock(p)) {
-            openBedrockSelection(p, "CSDPRBSMC", "Escolha uma opção.",
-                    List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA/ECONOMIA"),
-                    choice -> handleBedrockChoice(p, choice));
-            return;
-        }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
 
         inv.setItem(10, button(Material.ENDER_PEARL, "§f§6§lTPA§f"));
@@ -437,8 +436,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (!(event.getWhoClicked() instanceof Player p)) return;
         String title = event.getView().getTitle();
         if (!title.equals(MENU) && !title.equals(SHOP) && !title.equals(CLANS)
-                && !title.equals(TPA_MENU) && !title.equals(HOME_MENU) && !title.equals(WARP_MENU)
-                && !title.equals(SHOP_CATEGORIES) && !title.startsWith(SHOP_CATEGORY_PREFIX)) return;
+                && !title.equals(TPA_MENU) && !title.equals(TPA_REQUEST_MENU)
+                && !title.equals(HOME_MENU) && !title.equals(HOME_ACTION_MENU)
+                && !title.equals(WARP_MENU) && !title.equals(SHOP_CATEGORIES)
+                && !title.startsWith(SHOP_CATEGORY_PREFIX)) return;
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
@@ -458,22 +459,35 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             Player target = Bukkit.getPlayerExact(name.substring(2));
             if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
             sendTpa(p, target); p.closeInventory();
+        } else if (title.equals(TPA_REQUEST_MENU)) {
+            if (name.equals("§a§lACEITAR PEDIDO")) respondTpa(p, true);
+            else if (name.equals("§c§lRECUSAR PEDIDO")) respondTpa(p, false);
+            else if (name.equals("§c§lCANCELAR PEDIDO")) cancelOutgoingTpa(p);
+            else if (name.equals(BACK_BUTTON)) openTpaMenu(p);
         } else if (title.equals(HOME_MENU)) {
             if (name.equals("§a§lCRIAR HOME")) { createNextHome(p); openHomeMenu(p); }
-            else if (name.startsWith("§aHOME: ")) {
-                String home = name.substring("§aHOME: ".length());
-                if (event.isShiftClick()) {
-                    getConfig().set("players." + id(p) + ".homes." + home, null);
-                    saveConfig(); msg(p, "Home " + home + " apagada."); openHomeMenu(p);
-                } else teleportHome(p, home);
-            }
+            else if (name.startsWith("§aHOME: ")) openHomeActions(p, name.substring("§aHOME: ".length()));
+        } else if (title.equals(HOME_ACTION_MENU)) {
+            String home = selectedHomes.get(p.getUniqueId());
+            if (home == null) { openHomeMenu(p); return; }
+            if (name.equals("§a§lTELEPORTAR")) teleportHome(p, home);
+            else if (name.equals("§e§lEDITAR LOCAL")) {
+                getConfig().set("players." + id(p) + ".homes." + home, p.getLocation());
+                saveConfig(); msg(p, "Local da home " + home + " atualizado."); openHomeMenu(p);
+            } else if (name.equals("§c§lAPAGAR HOME")) {
+                deleteHome(p, home); selectedHomes.remove(p.getUniqueId()); openHomeMenu(p);
+            } else if (name.equals(BACK_BUTTON)) openHomeMenu(p);
         } else if (title.equals(WARP_MENU) && name.startsWith("§b")) {
             teleportWarp(p, name.substring(2));
         } else if (title.equals(SHOP_CATEGORIES) && name.startsWith("§e")) {
             openShopCategory(p, name.substring(2));
         } else if (title.startsWith(SHOP_CATEGORY_PREFIX)) {
-            ShopProduct product = findProduct(name.replace("§f§l", "").replace("§f", "").replace("§r", ""));
-            if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
+            if (name.equals(SHOP_SELL_HAND)) sellHand(p);
+            else if (name.equals(SHOP_SELL_ALL)) sellAll(p);
+            else {
+                ShopProduct product = findProduct(name.replace("§f§l", "").replace("§f", "").replace("§r", ""));
+                if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
+            }
         } else if (title.equals(CLANS)) {
             p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
         } else if (title.equals(SHOP)) buy(p, name);
@@ -483,8 +497,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
         if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS)
-                || title.equals(TPA_MENU) || title.equals(HOME_MENU) || title.equals(WARP_MENU)
-                || title.equals(SHOP_CATEGORIES) || title.startsWith(SHOP_CATEGORY_PREFIX)) {
+                || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
+                || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
+                || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
+                || title.startsWith(SHOP_CATEGORY_PREFIX)) {
             event.setCancelled(true);
         }
     }
@@ -492,18 +508,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void openTpaMenu(Player p) {
         List<? extends Player> targets = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p))
                 .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
-        if (isBedrock(p)) {
-            List<String> labels = targets.stream().map(Player::getName).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-            labels.add("Voltar");
-            openBedrockSelection(p, "TPA", "Escolha quem receberá seu pedido.", labels, index -> {
-                if (index >= 0 && index < targets.size()) sendTpa(p, targets.get(index)); else openMenu(p);
-            });
-            return;
-        }
         Inventory inv = Bukkit.createInventory(null, 54, TPA_MENU);
         int slot = 0;
         for (Player target : targets) { if (slot >= 45) break; inv.setItem(slot++, button(Material.PLAYER_HEAD, "§a" + target.getName())); }
-        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+        inv.setItem(45, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        inv.setItem(53, button(Material.PAPER, "§e§lMEUS PEDIDOS"));
+        p.openInventory(inv);
     }
 
     private void openHomeMenu(Player p) {
@@ -511,30 +522,26 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ConfigurationSection homes = getConfig().getConfigurationSection(path);
         List<String> names = homes == null ? new ArrayList<>() : new ArrayList<>(homes.getKeys(false));
         names.sort(String.CASE_INSENSITIVE_ORDER);
-        if (isBedrock(p)) {
-            List<String> labels = new ArrayList<>();
-            labels.add("Criar home (automática)");
-            for (String home : names) { labels.add("Ir para: " + home); labels.add("Apagar: " + home); }
-            labels.add("Voltar");
-            openBedrockSelection(p, "HOMES", "Você tem " + names.size() + "/5 homes.", labels, index -> {
-                if (index == 0) { createNextHome(p); openHomeMenu(p); }
-                else if (index > 0 && index <= names.size() * 2) {
-                    String home = names.get((index - 1) / 2);
-                    if ((index - 1) % 2 == 0) teleportHome(p, home);
-                    else { deleteHome(p, home); openHomeMenu(p); }
-                } else openMenu(p);
-            });
-            return;
-        }
         Inventory inv = Bukkit.createInventory(null, 27, HOME_MENU);
         inv.setItem(10, button(Material.EMERALD, "§a§lCRIAR HOME"));
         int[] slots = {12,13,14,15,16};
         for (int i=0; i<Math.min(names.size(), slots.length); i++) {
             ItemStack item=button(Material.RED_BED, "§aHOME: "+names.get(i));
-            ItemMeta meta=item.getItemMeta(); meta.setLore(List.of("§7Clique: teleportar","§cShift + clique: apagar")); item.setItemMeta(meta);
+            ItemMeta meta=item.getItemMeta(); meta.setLore(List.of("§7Clique para abrir opções:","§aTeleportar","§eEditar localização","§cApagar home")); item.setItemMeta(meta);
             inv.setItem(slots[i], item);
         }
         inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void openHomeActions(Player p, String home) {
+        if (!getConfig().contains("players." + id(p) + ".homes." + home)) { msg(p, "Home não encontrada."); openHomeMenu(p); return; }
+        selectedHomes.put(p.getUniqueId(), home);
+        Inventory inv = Bukkit.createInventory(null, 27, HOME_ACTION_MENU);
+        inv.setItem(10, button(Material.ENDER_PEARL, "§a§lTELEPORTAR"));
+        inv.setItem(13, button(Material.COMPASS, "§e§lEDITAR LOCAL"));
+        inv.setItem(16, button(Material.BARRIER, "§c§lAPAGAR HOME"));
+        inv.setItem(22, button(Material.PAPER, BACK_BUTTON));
+        p.openInventory(inv);
     }
 
     private void createNextHome(Player p) {
@@ -560,11 +567,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void openWarpMenu(Player p) {
         ConfigurationSection section=getConfig().getConfigurationSection("warps");
         List<String> names=section==null?new ArrayList<>():new ArrayList<>(section.getKeys(false)); names.sort(String.CASE_INSENSITIVE_ORDER);
-        if(isBedrock(p)) {
-            List<String> labels=new ArrayList<>(names); labels.add("Voltar");
-            openBedrockSelection(p,"WARPS","Escolha um destino.",labels,index->{if(index>=0&&index<names.size())teleportWarp(p,names.get(index));else openMenu(p);});
-            return;
-        }
         Inventory inv=Bukkit.createInventory(null,54,WARP_MENU); int slot=0;
         for(String name:names){if(slot>=45)break;inv.setItem(slot++,button(Material.ENDER_EYE,"§b"+name));}
         inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
@@ -576,7 +578,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openShop(Player p) {
-        if(isBedrock(p)){List<String> labels=new ArrayList<>(SHOP_CATEGORIES_LIST);labels.add("Voltar");openBedrockSelection(p,"LOJA","Escolha uma categoria.",labels,index->{if(index>=0&&index<SHOP_CATEGORIES_LIST.size())openShopCategory(p,SHOP_CATEGORIES_LIST.get(index));else openMenu(p);});return;}
         Inventory inv=Bukkit.createInventory(null,27,SHOP_CATEGORIES);
         Material[] icons={Material.DIAMOND,Material.BRICKS,Material.WHEAT,Material.COOKED_BEEF,Material.CHEST,Material.ENDER_PEARL};
         for(int i=0;i<SHOP_CATEGORIES_LIST.size();i++)inv.setItem(10+i,button(icons[i],"§e"+SHOP_CATEGORIES_LIST.get(i)));
@@ -585,13 +586,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void openShopCategory(Player p,String category) {
         List<ShopProduct> products=SHOP_PRODUCTS.stream().filter(product->product.category().equals(category)).toList();
-        if(isBedrock(p)){
-            List<String> labels=new ArrayList<>();for(ShopProduct product:products)labels.add(product.name()+" - $"+product.price()+(product.limited()?" (limitado)":""));labels.add("Voltar");
-            openBedrockSelection(p,category,"Saldo: $"+money(p)+". Selecione um item.",labels,index->{if(index>=0&&index<products.size())buyProduct(p,products.get(index),1);else openShop(p);});return;
-        }
         Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
         for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
             meta.setDisplayName("§f§l"+product.name()+"§f");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
+        inv.setItem(45, button(Material.GOLD_INGOT, SHOP_SELL_HAND));
+        inv.setItem(47, button(Material.CHEST, SHOP_SELL_ALL));
         inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
     }
 
