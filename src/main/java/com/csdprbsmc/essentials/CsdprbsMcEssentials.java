@@ -9,6 +9,7 @@ import org.bukkit.event.*;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
@@ -1228,9 +1229,18 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private List<Mission> missions() {
         return List.of(
-                new Mission("stone", "Minerador", Material.STONE, 64, 250, "Quebre 64 blocos de pedra"),
-                new Mission("zombies", "Caçador", Material.IRON_SWORD, 10, 400, "Derrote 10 zumbis"),
-                new Mission("wheat", "Agricultor", Material.WHEAT, 32, 300, "Colha 32 trigos maduros")
+                new Mission("stone", "Minerador veterano", Material.STONE, 512, 1200, "Quebre 512 blocos de pedra"),
+                new Mission("zombies", "Exterminador", Material.IRON_SWORD, 100, 2500, "Derrote 100 zumbis"),
+                new Mission("wheat", "Mestre agricultor", Material.WHEAT, 256, 1000, "Colha 256 trigos maduros"),
+                new Mission("diamonds", "Caçador de diamantes", Material.DIAMOND, 64, 5000, "Minere 64 minérios de diamante"),
+                new Mission("debris", "Relíquia do Nether", Material.ANCIENT_DEBRIS, 16, 10000, "Minere 16 detritos ancestrais"),
+                new Mission("obsidian", "Arquiteto do portal", Material.OBSIDIAN, 256, 3500, "Quebre 256 blocos de obsidiana"),
+                new Mission("skeletons", "Quebra-ossos", Material.BOW, 100, 3000, "Derrote 100 esqueletos"),
+                new Mission("creepers", "Perigo explosivo", Material.GUNPOWDER, 50, 4000, "Derrote 50 creepers"),
+                new Mission("endermen", "Olhar do vazio", Material.ENDER_PEARL, 30, 6000, "Derrote 30 endermen"),
+                new Mission("wither", "Desafio das trevas", Material.NETHER_STAR, 1, 15000, "Derrote 1 Wither"),
+                new Mission("fish", "Pescador lendário", Material.FISHING_ROD, 128, 2500, "Pesque 128 peixes"),
+                new Mission("dragon", "Lenda do End", Material.DRAGON_EGG, 1, 25000, "Derrote o Dragão do End")
         );
     }
 
@@ -1248,20 +1258,40 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void missionBlockBreak(BlockBreakEvent event) {
         Player p = event.getPlayer();
-        if (event.getBlock().getType() == Material.STONE) addMissionProgress(p, "stone", 1);
-        if (event.getBlock().getType() == Material.WHEAT && event.getBlock().getBlockData() instanceof org.bukkit.block.data.Ageable age
+        Material type = event.getBlock().getType();
+        if (type == Material.STONE) addMissionProgress(p, "stone", 1);
+        if ((type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE)) addMissionProgress(p, "diamonds", 1);
+        if (type == Material.ANCIENT_DEBRIS) addMissionProgress(p, "debris", 1);
+        if (type == Material.OBSIDIAN) addMissionProgress(p, "obsidian", 1);
+        if (type == Material.WHEAT && event.getBlock().getBlockData() instanceof org.bukkit.block.data.Ageable age
                 && age.getAge() >= age.getMaximumAge()) addMissionProgress(p, "wheat", 1);
     }
 
     @EventHandler
     public void missionMobKill(EntityDeathEvent event) {
         Player killer = event.getEntity().getKiller();
-        if (killer != null && event.getEntityType() == org.bukkit.entity.EntityType.ZOMBIE) addMissionProgress(killer, "zombies", 1);
+        if (killer == null) return;
+        switch (event.getEntityType()) {
+            case ZOMBIE -> addMissionProgress(killer, "zombies", 1);
+            case SKELETON -> addMissionProgress(killer, "skeletons", 1);
+            case CREEPER -> addMissionProgress(killer, "creepers", 1);
+            case ENDERMAN -> addMissionProgress(killer, "endermen", 1);
+            case WITHER -> addMissionProgress(killer, "wither", 1);
+            case ENDER_DRAGON -> addMissionProgress(killer, "dragon", 1);
+            default -> { }
+        }
+    }
+
+    @EventHandler
+    public void missionFishing(PlayerFishEvent event) {
+        if (event.getState() == PlayerFishEvent.State.CAUGHT_FISH) {
+            addMissionProgress(event.getPlayer(), "fish", 1);
+        }
     }
 
     private void openMissions(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 27, MISSIONS);
-        int[] slots = {10, 13, 16};
+        Inventory inv = Bukkit.createInventory(null, 54, MISSIONS);
+        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23};
         List<Mission> all = missions();
         for (int i = 0; i < all.size(); i++) {
             Mission m = all.get(i);
@@ -1276,7 +1306,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             item.setItemMeta(meta);
             inv.setItem(slots[i], item);
         }
-        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
 
