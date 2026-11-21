@@ -7,6 +7,8 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
@@ -32,6 +34,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, String> tagCache = new ConcurrentHashMap<>();
     private final Map<UUID, String> selectedHomes = new HashMap<>();
     private final Map<UUID, String> pendingClanInput = new ConcurrentHashMap<>();
+    private final Map<UUID, ItemStack> pendingSale = new HashMap<>();
+    private final Map<UUID, String> pendingClanColorPart = new HashMap<>();
+    private static final String SELL_SELECT = "§8§lSELECIONE O ITEM PARA VENDER";
+    private static final String SELL_CONFIRM = "§8§lCONFIRMAR VENDA";
+    private static final String CLAN_COLORS = "§8§lCORES DO CLAN";
+    private static final String MISSIONS = "§8§lMISSÕES E RECOMPENSAS";
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -294,6 +302,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         tagCache.remove(leaving);
         pendingClanInput.remove(leaving);
         selectedHomes.remove(leaving);
+        pendingSale.remove(leaving);
+        pendingClanColorPart.remove(leaving);
         event.getPlayer().setCustomName(null);
         event.getPlayer().setCustomNameVisible(false);
         tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
@@ -392,7 +402,15 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private String playerTag(Player player) {
         String clan = getConfig().getString("players." + id(player) + ".clan");
-        String clanTag = clan == null ? "" : " §f§l" + clan.toUpperCase(Locale.ROOT);
+        String clanTag = "";
+        if (clan != null) {
+            String first = getConfig().getString("clans." + clan + ".color1", "§f");
+            String second = getConfig().getString("clans." + clan + ".color2", first);
+            String upper = clan.toUpperCase(Locale.ROOT);
+            StringBuilder styled = new StringBuilder(" §l");
+            for (int i = 0; i < upper.length(); i++) styled.append(i % 2 == 0 ? first : second).append(upper.charAt(i));
+            clanTag = styled.toString();
+        }
         return memberTag() + clanTag;
     }
 
@@ -466,6 +484,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(13, button(Material.NAME_TAG, "§f§e§lCLANS§f"));
         inv.setItem(14, button(Material.GOLD_INGOT, "§f§6§lRANKINGS§f"));
         inv.setItem(15, button(Material.EMERALD, "§f§e§lLOJA/ECONOMIA§f"));
+        inv.setItem(16, button(Material.WRITABLE_BOOK, "§f§6§lMISSÕES§f"));
 
         p.openInventory(inv);
     }
@@ -489,7 +508,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || event.getClickedInventory() != event.getView().getTopInventory()) return;
 
         String title = plain(event.getView().getTitle());
-        boolean managed = title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
+        boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM))
+                || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))
+                || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(SHOP))
@@ -503,7 +524,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String name = plain(item.getItemMeta().getDisplayName());
 
         if (name.equals(plain(BACK_BUTTON))) {
-            if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
+            if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM))) { pendingSale.remove(p.getUniqueId()); openShop(p); }
+            else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))) openMenu(p);
+            else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
             else if (title.equals(plain(TPA_REQUEST_MENU))) openTpaMenu(p);
             else openMenu(p);
@@ -518,8 +541,27 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "CLANS" -> openClanMenu(p);
                 case "RANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
                 case "LOJA/ECONOMIA" -> openShop(p);
+                case "MISSÕES" -> openMissions(p);
                 default -> { }
             }
+        } else if (title.equals(plain(SELL_SELECT))) {
+            if (event.getSlot() < 45 && item != null && !item.getType().isAir()) openSellConfirmation(p, item);
+        } else if (title.equals(plain(SELL_CONFIRM))) {
+            if (name.equals("CONFIRMAR VENDA")) confirmSale(p);
+            else if (name.equals("CANCELAR")) { pendingSale.remove(p.getUniqueId()); openSellSelection(p); }
+        } else if (title.equals(plain(CLAN_COLORS))) {
+            if (name.startsWith("COR: ")) {
+                String code = colorCode(name.substring(5));
+                String clan = getConfig().getString("players." + id(p) + ".clan");
+                if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder pode alterar as cores."); openClanMenu(p); return; }
+                String part = pendingClanColorPart.getOrDefault(p.getUniqueId(), "color1");
+                getConfig().set("clans." + clan + "." + part, code);
+                if (part.equals("color1")) { pendingClanColorPart.put(p.getUniqueId(), "color2"); msg(p, "Primeira cor salva. Escolha a segunda."); openClanColorMenu(p); }
+                else { pendingClanColorPart.remove(p.getUniqueId()); saveConfig(); refreshPlayerTags(); msg(p, "Gradiente do clan atualizado!"); openClanMenu(p); }
+                saveConfig();
+            }
+        } else if (title.equals(plain(MISSIONS))) {
+            if (name.startsWith("MISSÃO: ")) claimMission(p, name.substring(8));
         } else if (title.equals(plain(TPA_MENU))) {
             if (name.equals("PEDIDOS RECEBIDOS")) openTpaRequests(p);
             else if (name.equals("MEUS PEDIDOS")) { cancelOutgoingTpa(p); openTpaMenu(p); }
@@ -564,6 +606,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             } else if (name.equals("CONVIDAR JOGADOR")) {
                 pendingClanInput.put(p.getUniqueId(), "convidar");
                 msg(p, "Digite no chat o nome do jogador que deseja convidar.");
+            } else if (name.equals("PERSONALIZAR CORES")) {
+                String clan = getConfig().getString("players." + id(p) + ".clan");
+                if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder do clan pode personalizar as cores."); openClanMenu(p); return; }
+                pendingClanColorPart.put(p.getUniqueId(), "color1"); openClanColorMenu(p);
             } else if (name.equals("ACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
             else if (name.equals("INFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
             else if (name.equals("SAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
@@ -573,7 +619,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS)
+        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -679,7 +725,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
         for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
             meta.setDisplayName("§f§l"+product.name()+"§f");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
-        inv.setItem(45, button(Material.GOLD_INGOT, SHOP_SELL_HAND));
+        inv.setItem(45, button(Material.GOLD_INGOT, "§a§lVENDER ITEM DO INVENTÁRIO"));
         inv.setItem(47, button(Material.CHEST, SHOP_SELL_ALL));
         inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
     }
@@ -754,15 +800,56 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         tpa.remove(targetId); tpaCreated.remove(targetId); msg(requester, "Pedido cancelado.");
     }
 
-    private void sellHand(Player p) {
-        ItemStack hand = p.getInventory().getItemInMainHand();
-        if (hand == null || hand.getType().isAir()) { msg(p, "Segure o item que deseja vender."); return; }
-        ShopProduct product = SHOP_PRODUCTS.stream().filter(item -> item.material() == hand.getType()).findFirst().orElse(null);
-        if (product == null) { msg(p, "Esse item não é aceito pela loja."); return; }
-        int amount = hand.getAmount();
-        double total = Math.floor(product.price() * 0.5 * amount * 100.0) / 100.0;
-        p.getInventory().setItemInMainHand(null); addMoney(p, total);
-        msg(p, "Você vendeu " + amount + "x " + product.name() + " por $" + total + ".");
+    private void openSellSelection(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, SELL_SELECT);
+        int slot = 0;
+        for (ItemStack stack : p.getInventory().getStorageContents()) {
+            if (stack == null || stack.getType().isAir() || isCompass(stack)) continue;
+            ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == stack.getType()).findFirst().orElse(null);
+            if (product == null || slot >= 45) continue;
+            ItemStack display = stack.clone();
+            ItemMeta meta = display.getItemMeta();
+            meta.setLore(List.of("§7Quantidade: §f" + stack.getAmount(), "§7Valor total: §a$" + (Math.floor(product.price() * .5 * stack.getAmount() * 100) / 100), "§eClique para selecionar"));
+            display.setItemMeta(meta);
+            inv.setItem(slot++, display);
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        if (slot == 0) msg(p, "Você não possui itens aceitos pela loja.");
+        p.openInventory(inv);
+    }
+
+    private void openSellConfirmation(Player p, ItemStack chosen) {
+        pendingSale.put(p.getUniqueId(), chosen.clone());
+        ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == chosen.getType()).findFirst().orElse(null);
+        if (product == null) return;
+        double total = Math.floor(product.price() * .5 * chosen.getAmount() * 100) / 100;
+        Inventory inv = Bukkit.createInventory(null, 27, SELL_CONFIRM);
+        inv.setItem(11, button(Material.LIME_WOOL, "§a§lCONFIRMAR VENDA"));
+        inv.setItem(13, chosen.clone());
+        inv.setItem(15, button(Material.RED_WOOL, "§c§lCANCELAR"));
+        p.openInventory(inv);
+        msg(p, "Confirme a venda de " + chosen.getAmount() + "x " + product.name() + " por $" + total + ".");
+    }
+
+    private void confirmSale(Player p) {
+        ItemStack selected = pendingSale.remove(p.getUniqueId());
+        if (selected == null) { openSellSelection(p); return; }
+        int remaining = selected.getAmount();
+        for (int slot = 0; slot < 36 && remaining > 0; slot++) {
+            ItemStack current = p.getInventory().getItem(slot);
+            if (current == null || current.getType() != selected.getType()) continue;
+            int take = Math.min(remaining, current.getAmount());
+            current.setAmount(current.getAmount() - take);
+            if (current.getAmount() <= 0) p.getInventory().setItem(slot, null);
+            remaining -= take;
+        }
+        if (remaining > 0) { msg(p, "Os itens mudaram no inventário. Venda cancelada."); openSellSelection(p); return; }
+        ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == selected.getType()).findFirst().orElse(null);
+        if (product == null) return;
+        double total = Math.floor(product.price() * .5 * selected.getAmount() * 100) / 100;
+        addMoney(p, total);
+        msg(p, "Você vendeu " + selected.getAmount() + "x " + product.name() + " por $" + total + ".");
+        openSellSelection(p);
     }
 
     private void sellAll(Player p) {
@@ -787,11 +874,31 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         msg(target,p.getName()+" pediu teleporte. Use /tpaccept ou /tpdeny.");
     }
 
+    private void openClanColorMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, CLAN_COLORS);
+        String[] labels = {"BRANCO","AMARELO","VERMELHO","AZUL","VERDE","ROSA","CIANO","LARANJA","ROXO","AZUL ESCURO","VERDE ESCURO","VERMELHO ESCURO"};
+        String[] codes = {"§f","§e","§c","§9","§a","§d","§b","§6","§5","§3","§2","§4"};
+        for (int i = 0; i < labels.length; i++) inv.setItem(i, button(Material.WHITE_WOOL, "§fCOR: " + labels[i]));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private String colorCode(String label) {
+        return switch (label) {
+            case "BRANCO" -> "§f"; case "AMARELO" -> "§e"; case "VERMELHO" -> "§c";
+            case "AZUL" -> "§9"; case "VERDE" -> "§a"; case "ROSA" -> "§d";
+            case "CIANO" -> "§b"; case "LARANJA" -> "§6"; case "ROXO" -> "§5";
+            case "AZUL ESCURO" -> "§3"; case "VERDE ESCURO" -> "§2"; case "VERMELHO ESCURO" -> "§4";
+            default -> "§f";
+        };
+    }
+
     private void openClanMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
         inv.setItem(10, button(Material.NAME_TAG, "§e§lCRIAR CLAN"));
         inv.setItem(11, button(Material.PLAYER_HEAD, "§a§lCONVIDAR JOGADOR"));
         inv.setItem(13, button(Material.EMERALD, "§a§lACEITAR CONVITE"));
+        inv.setItem(14, button(Material.PAINTING, "§e§lPERSONALIZAR CORES"));
         inv.setItem(15, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
         inv.setItem(16, button(Material.OAK_DOOR, "§c§lSAIR DO CLAN"));
         inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
@@ -1031,6 +1138,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
             case "shop" -> openShop(p);
 
+            case "missions" -> openMissions(p);
+
             case "topmoney" -> showTop(p, "money");
 
             case "topkills" -> showTop(p, "kills");
@@ -1077,6 +1186,75 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
 
         return true;
+    }
+
+    private record Mission(String id, String name, Material icon, int target, double reward, String description) {}
+
+    private List<Mission> missions() {
+        return List.of(
+                new Mission("stone", "Minerador", Material.STONE, 64, 250, "Quebre 64 blocos de pedra"),
+                new Mission("zombies", "Caçador", Material.IRON_SWORD, 10, 400, "Derrote 10 zumbis"),
+                new Mission("wheat", "Agricultor", Material.WHEAT, 32, 300, "Colha 32 trigos maduros")
+        );
+    }
+
+    private String missionPath(Player p, String missionId) { return "players." + id(p) + ".missions." + missionId; }
+
+    private void addMissionProgress(Player p, String missionId, int amount) {
+        String path = missionPath(p, missionId);
+        if (getConfig().getBoolean(path + ".claimed")) return;
+        Mission m = missions().stream().filter(x -> x.id().equals(missionId)).findFirst().orElse(null);
+        if (m == null) return;
+        getConfig().set(path + ".progress", Math.min(m.target(), getConfig().getInt(path + ".progress") + amount));
+        saveConfig();
+    }
+
+    @EventHandler
+    public void missionBlockBreak(BlockBreakEvent event) {
+        Player p = event.getPlayer();
+        if (event.getBlock().getType() == Material.STONE) addMissionProgress(p, "stone", 1);
+        if (event.getBlock().getType() == Material.WHEAT && event.getBlock().getBlockData() instanceof org.bukkit.block.data.Ageable age
+                && age.getAge() >= age.getMaximumAge()) addMissionProgress(p, "wheat", 1);
+    }
+
+    @EventHandler
+    public void missionMobKill(EntityDeathEvent event) {
+        Player killer = event.getEntity().getKiller();
+        if (killer != null && event.getEntityType() == org.bukkit.entity.EntityType.ZOMBIE) addMissionProgress(killer, "zombies", 1);
+    }
+
+    private void openMissions(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, MISSIONS);
+        int[] slots = {10, 13, 16};
+        List<Mission> all = missions();
+        for (int i = 0; i < all.size(); i++) {
+            Mission m = all.get(i);
+            String path = missionPath(p, m.id());
+            int progress = getConfig().getInt(path + ".progress");
+            boolean claimed = getConfig().getBoolean(path + ".claimed");
+            ItemStack item = button(m.icon(), (claimed ? "§a§lCONCLUÍDA: " : "§e§lMISSÃO: ") + m.id());
+            ItemMeta meta = item.getItemMeta();
+            meta.setLore(List.of("§7" + m.description(), "§7Progresso: §f" + progress + "/" + m.target(),
+                    "§7Recompensa: §a$" + m.reward(), claimed ? "§aRecompensa recebida" :
+                    progress >= m.target() ? "§eClique para resgatar" : "§cContinue trabalhando"));
+            item.setItemMeta(meta);
+            inv.setItem(slots[i], item);
+        }
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void claimMission(Player p, String missionId) {
+        Mission m = missions().stream().filter(x -> x.id().equals(missionId)).findFirst().orElse(null);
+        if (m == null) return;
+        String path = missionPath(p, missionId);
+        if (getConfig().getBoolean(path + ".claimed")) { msg(p, "Você já resgatou essa missão."); openMissions(p); return; }
+        if (getConfig().getInt(path + ".progress") < m.target()) { msg(p, "Missão ainda não concluída."); openMissions(p); return; }
+        getConfig().set(path + ".claimed", true);
+        addMoney(p, m.reward());
+        saveConfig();
+        msg(p, "Missão concluída! Você recebeu §a$" + m.reward());
+        openMissions(p);
     }
 
     private void showTop(Player p, String type) {
