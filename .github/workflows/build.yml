@@ -1,28 +1,33 @@
-plugins {
-    id 'java'
-}
+name: Build CsdprbsMc Essentials
 
-group = 'com.csdprbsmc'
-version = '1.0.0'
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-repositories {
-    mavenCentral()
-    maven {
-        url = 'https://repo.papermc.io/repository/maven-public/'
-    }
-}
+permissions:
+  contents: read
 
-dependencies {
-    compileOnly 'io.papermc.paper:paper-api:26.3.build.+'
-}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.release = 25
-}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+
+      - run: gradle clean build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CsdprbsMcEssentials
+          path: build/libs/*.jar
+          if-no-files-found: error
