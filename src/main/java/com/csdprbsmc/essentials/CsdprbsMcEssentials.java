@@ -324,7 +324,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || isCompass(player.getInventory().getItemInOffHand());
         if (!menuCompass) return;
         event.setCancelled(true);
-        if (event.getHand() == EquipmentSlot.OFF_HAND) return;
         openMenu(player);
     }
 
