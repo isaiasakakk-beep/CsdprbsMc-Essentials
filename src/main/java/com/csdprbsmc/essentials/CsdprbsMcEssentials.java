@@ -191,6 +191,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     @EventHandler
+    public void respawn(PlayerRespawnEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> giveCompass(event.getPlayer()));
+    }
+
+    @EventHandler
     public void interact(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
         if (isCompass(event.getItem())) {
@@ -466,6 +471,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!args[0].matches("[a-zA-Z0-9_-]{1,16}")) {
+                    msg(p, "Nome inválido. Use até 16 letras, números, _ ou -.");
+                    return true;
+                }
                 String path = "players." + id(p) + ".homes";
                 ConfigurationSection homes =
                         getConfig().getConfigurationSection(path);
@@ -510,11 +519,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
-                getConfig().set(
-                        "players." + id(p) + ".homes." + args[0],
-                        null
-                );
-
+                String homePath = "players." + id(p) + ".homes." + args[0];
+                if (!getConfig().contains(homePath)) {
+                    msg(p, "Home não encontrada.");
+                    return true;
+                }
+                getConfig().set(homePath, null);
                 saveConfig();
                 msg(p, "Home apagada.");
             }
@@ -529,6 +539,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!args[0].matches("[a-zA-Z0-9_-]{1,24}")) {
+                    msg(p, "Nome inválido. Use até 24 letras, números, _ ou -.");
+                    return true;
+                }
                 getConfig().set("warps." + args[0], p.getLocation());
                 saveConfig();
                 msg(p, "Warp criada.");
@@ -561,6 +575,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!getConfig().contains("warps." + args[0])) {
+                    msg(p, "Warp não encontrada.");
+                    return true;
+                }
                 getConfig().set("warps." + args[0], null);
                 saveConfig();
                 msg(p, "Warp apagada.");
