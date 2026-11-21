@@ -605,7 +605,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(SHOP_CATEGORIES))) {
             openShopCategory(p, name);
         } else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) {
-            if (name.equals(plain(SHOP_SELL_HAND))) openSellSelection(p);
+            if (name.equals("VENDER ITEM DO INVENTÁRIO")) openSellSelection(p);
             else if (name.equals(plain(SHOP_SELL_ALL))) sellAll(p);
             else {
                 ShopProduct product = findProduct(name);
