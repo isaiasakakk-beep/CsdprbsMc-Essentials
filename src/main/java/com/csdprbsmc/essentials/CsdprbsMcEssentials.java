@@ -736,4 +736,4 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             default -> msg(p, "Comando inválido. Use /clan ajuda.");
         }
     }
-                        }
+    }
