@@ -12,6 +12,8 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.geysermc.floodgate.api.FloodgateApi;
+import org.geysermc.cumulus.form.SimpleForm;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
@@ -20,7 +22,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
 
     private final Map<UUID, UUID> tpa = new HashMap<>();
-    private final Map<UUID, UUID> clanInvites = new HashMap<>();
 
     private NamespacedKey compassKey;
 
@@ -97,7 +98,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         );
 
         compass.setItemMeta(meta);
-        p.getInventory().setItem(0, compass);
+        int slot = p.getInventory().firstEmpty();
+        if (slot == -1) {
+            msg(p, "Seu inventário está cheio. Libere um espaço para receber a bússola do menu.");
+            return;
+        }
+        p.getInventory().setItem(slot, compass);
     }
 
     private boolean isCompass(ItemStack item) {
@@ -150,8 +156,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void clickCompass(InventoryClickEvent event) {
-        if (isCompass(event.getCurrentItem()) ||
-                isCompass(event.getCursor())) {
+        if (isCompass(event.getCurrentItem()) || isCompass(event.getCursor()) ||
+                (event.getHotbarButton() >= 0 && isCompass(event.getWhoClicked().getInventory().getItem(event.getHotbarButton())))) {
             event.setCancelled(true);
         }
     }
@@ -181,6 +187,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
+        if (isBedrock(p)) {
+            openBedrockMenu(p);
+            return;
+        }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
 
         inv.setItem(10, button(Material.ENDER_PEARL, "§0§lTPA"));
@@ -191,6 +201,57 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(15, button(Material.EMERALD, "§e§lLOJA/ECONOMIA"));
 
         p.openInventory(inv);
+    }
+
+    private boolean isBedrock(Player p) {
+        try {
+            return FloodgateApi.getInstance().isFloodgatePlayer(p.getUniqueId());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void openBedrockMenu(Player p) {
+        SimpleForm form = SimpleForm.builder()
+                .title("CSDPRBSMC")
+                .content("Escolha uma opção")
+                .button("TPA")
+                .button("HOME")
+                .button("WARPS")
+                .button("CLANS")
+                .button("RANKINGS")
+                .button("LOJA/ECONOMIA")
+                .validResultHandler((submittedForm, response) -> {
+                    switch (response.clickedButtonId()) {
+                        case 0 -> msg(p, "Use /tpa <jogador>");
+                        case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
+                        case 2 -> msg(p, "Use /warp <nome>");
+                        case 3 -> openBedrockClanMenu(p);
+                        case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
+                        case 5 -> openBedrockShop(p);
+                    }
+                }).build();
+        FloodgateApi.getInstance().sendForm(p.getUniqueId(), form);
+    }
+
+    private void openBedrockClanMenu(Player p) {
+        SimpleForm form = SimpleForm.builder().title("CLANS")
+                .content("Use /clan ajuda para ver comandos de clan.")
+                .button("OK").build();
+        FloodgateApi.getInstance().sendForm(p.getUniqueId(), form);
+    }
+
+    private void openBedrockShop(Player p) {
+        SimpleForm.Builder builder = SimpleForm.builder().title("LOJA")
+                .content("Saldo: $" + money(p));
+        String[] labels = {"Ferro - $20", "Ouro - $35", "Diamante - $150", "Esmeralda - $100", "Madeira - $10", "Pão - $8", "Obsidiana - $80"};
+        for (String label : labels) builder.button(label);
+        builder.validResultHandler((form, response) -> {
+            String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
+            int id = response.clickedButtonId();
+            if (id >= 0 && id < names.length) buy(p, names[id]);
+        });
+        FloodgateApi.getInstance().sendForm(p.getUniqueId(), builder.build());
     }
 
     private ItemStack button(Material material, String name) {
@@ -624,6 +685,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             msg(p, "/clan sair");
             msg(p, "/clan info");
             msg(p, "/clan expulsar <jogador>");
+            msg(p, "/clan transferir <jogador>");
+            msg(p, "/clan dissolver");
             return;
         }
 
@@ -690,32 +753,22 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                clanInvites.put(target.getUniqueId(), p.getUniqueId());
+                getConfig().set("clan-invites." + id(target), ownClan);
+                saveConfig();
 
                 msg(target, "Convite de clan recebido. Use /clan aceitar.");
                 msg(p, "Convite enviado.");
             }
 
             case "aceitar" -> {
-                UUID leaderId = clanInvites.remove(p.getUniqueId());
-
-                if (leaderId == null) {
+                String clan = getConfig().getString("clan-invites." + id(p));
+                if (clan == null) {
                     msg(p, "Você não tem convites.");
                     return;
                 }
+                getConfig().set("clan-invites." + id(p), null);
 
-                Player leader = Bukkit.getPlayer(leaderId);
-
-                if (leader == null) {
-                    msg(p, "O líder saiu.");
-                    return;
-                }
-
-                String clan = getConfig().getString(
-                        "players." + id(leader) + ".clan"
-                );
-
-                if (clan == null) {
+                if (clan == null || !getConfig().contains("clans." + clan)) {
                     msg(p, "Esse clan não está mais disponível.");
                     return;
                 }
@@ -743,6 +796,21 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 saveConfig();
 
                 msg(p, "Você entrou no clan " + clan);
+            }
+
+            case "transferir" -> {
+                if (args.length != 2 || ownClan == null) { msg(p, "Use /clan transferir <jogador>"); return; }
+                if (!id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) { msg(p, "Somente o líder pode transferir."); return; }
+                Player target = Bukkit.getPlayerExact(args[1]);
+                if (target == null || !ownClan.equals(getConfig().getString("players." + id(target) + ".clan"))) { msg(p, "O jogador precisa estar no seu clan e online."); return; }
+                getConfig().set("clans." + ownClan + ".leader", id(target));
+                saveConfig(); msg(p, "Liderança transferida para " + target.getName() + "."); msg(target, "Você agora é líder do clan.");
+            }
+
+            case "dissolver" -> {
+                if (ownClan == null || !id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) { msg(p, "Somente o líder pode dissolver o clan."); return; }
+                for (String member : getConfig().getStringList("clans." + ownClan + ".members")) getConfig().set("players." + member + ".clan", null);
+                getConfig().set("clans." + ownClan, null); saveConfig(); msg(p, "Clan dissolvido.");
             }
 
             case "sair" -> {
