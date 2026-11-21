@@ -861,6 +861,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void confirmSale(Player p) {
         ItemStack selected = pendingSale.remove(p.getUniqueId());
         if (selected == null) { openSellSelection(p); return; }
+        int available = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack current = p.getInventory().getItem(slot);
+            if (current != null && current.getType() == selected.getType()) available += current.getAmount();
+        }
+        if (available < selected.getAmount()) {
+            msg(p, "Os itens mudaram no inventário. Venda cancelada.");
+            openSellSelection(p);
+            return;
+        }
         int remaining = selected.getAmount();
         for (int slot = 0; slot < 36 && remaining > 0; slot++) {
             ItemStack current = p.getInventory().getItem(slot);
@@ -870,7 +880,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (current.getAmount() <= 0) p.getInventory().setItem(slot, null);
             remaining -= take;
         }
-        if (remaining > 0) { msg(p, "Os itens mudaram no inventário. Venda cancelada."); openSellSelection(p); return; }
         ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == selected.getType()).findFirst().orElse(null);
         if (product == null) return;
         double total = Math.floor(product.price() * .5 * selected.getAmount() * 100) / 100;
