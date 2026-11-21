@@ -273,11 +273,15 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         event.getDrops().removeIf(this::isCompass);
     }
 
+    private boolean isBedrock(Player p) {
+        return Boolean.TRUE.equals(invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p));
+    }
+
     private void openMenu(Player p) {
-        Object bedrock = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
-        if (Boolean.TRUE.equals(bedrock)) {
-            invokeBedrock("openMenu", new Class<?>[]{Player.class, Consumer.class},
-                    p, (Consumer<Integer>) choice -> handleBedrockChoice(p, choice));
+        if (isBedrock(p)) {
+            openBedrockSelection(p, "CSDPRBSMC", "Escolha uma opção.",
+                    List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA/ECONOMIA"),
+                    choice -> handleBedrockChoice(p, choice));
             return;
         }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
@@ -459,9 +463,22 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openClanMenu(Player p) {
+        if (isBedrock(p)) {
+            openBedrockSelection(p, "CLANS", "Comandos disponíveis:",
+                    List.of("Criar clan: /clan criar <nome>", "Convidar: /clan convidar <jogador>",
+                            "Aceitar convite: /clan aceitar", "Informações: /clan info", "Sair: /clan sair", "Voltar"),
+                    index -> openMenu(p));
+            return;
+        }
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
         inv.setItem(13, button(Material.NAME_TAG, "§e§lCOMANDOS DE CLAN"));
         p.openInventory(inv);
+    }
+
+    private void buy(Player p, String name) {
+        String clean = name.replaceFirst("^§.", "");
+        ShopProduct product = findProduct(clean);
+        if (product != null) buyProduct(p, product, 1);
     }
 
     @Override
