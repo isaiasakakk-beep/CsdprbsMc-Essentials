@@ -95,14 +95,30 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void initializeBedrockMenus() {
-        if (!Bukkit.getPluginManager().isPluginEnabled("floodgate")) return;
+        org.bukkit.plugin.Plugin floodgate = Bukkit.getPluginManager().getPlugin("floodgate");
+        if (floodgate == null) {
+            for (org.bukkit.plugin.Plugin installed : Bukkit.getPluginManager().getPlugins()) {
+                if (installed.getName().equalsIgnoreCase("floodgate")) {
+                    floodgate = installed;
+                    break;
+                }
+            }
+        }
+        if (floodgate == null || !floodgate.isEnabled()) {
+            bedrockMenus = null;
+            getLogger().warning("Floodgate não está ativo. Jogadores Bedrock usarão o menu de inventário; instale/ative o Floodgate para abrir formulários.");
+            return;
+        }
         try {
             Class<?> type = Class.forName("com.csdprbsmc.essentials.BedrockMenus");
-            bedrockMenus = type.getConstructor().newInstance();
-            getLogger().info("Integração de formulários Bedrock ativada.");
+            Object bridge = type.getConstructor().newInstance();
+            type.getMethod("isBedrock", Player.class);
+            type.getMethod("openSelection", Player.class, String.class, String.class, List.class, Consumer.class);
+            bedrockMenus = bridge;
+            getLogger().info("Integração de formulários Bedrock ativada via Floodgate.");
         } catch (Throwable error) {
             bedrockMenus = null;
-            getLogger().warning("Floodgate detectado, mas os formulários não puderam ser ativados: " + error.getClass().getSimpleName());
+            getLogger().severe("Floodgate está ativo, mas a integração de formulários falhou: " + error.getClass().getName() + ": " + error.getMessage());
         }
     }
 
