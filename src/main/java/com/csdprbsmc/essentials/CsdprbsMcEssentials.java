@@ -1,3 +1,4 @@
+
 package com.csdprbsmc.essentials;
 
 import org.bukkit.*;
@@ -45,7 +46,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         for (String name : commands) {
             PluginCommand command = getCommand(name);
-            if (command != null) command.setExecutor(this);
+            if (command != null) {
+                command.setExecutor(this);
+            }
         }
 
         getLogger().info("CsdprbsMc Essentials iniciado!");
@@ -79,7 +82,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void giveCompass(Player p) {
         for (ItemStack item : p.getInventory().getContents()) {
-            if (isCompass(item)) return;
+            if (isCompass(item)) {
+                return;
+            }
         }
 
         ItemStack compass = new ItemStack(Material.RECOVERY_COMPASS);
@@ -96,8 +101,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private boolean isCompass(ItemStack item) {
-        if (item == null || item.getType() != Material.RECOVERY_COMPASS)
+        if (item == null || item.getType() != Material.RECOVERY_COMPASS) {
             return false;
+        }
 
         ItemMeta meta = item.getItemMeta();
 
@@ -119,8 +125,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     p.getName()
             );
 
-            if (!getConfig().contains("players." + id(p) + ".money"))
+            if (!getConfig().contains("players." + id(p) + ".money")) {
                 money(p, 100);
+            }
 
             saveConfig();
         });
@@ -136,8 +143,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void drop(PlayerDropItemEvent event) {
-        if (isCompass(event.getItemDrop().getItemStack()))
+        if (isCompass(event.getItemDrop().getItemStack())) {
             event.setCancelled(true);
+        }
     }
 
     @EventHandler
@@ -150,8 +158,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void dragCompass(InventoryDragEvent event) {
-        if (isCompass(event.getOldCursor()))
+        if (isCompass(event.getOldCursor())) {
             event.setCancelled(true);
+        }
     }
 
     @EventHandler
@@ -194,18 +203,24 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void menuClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player p)) return;
+        if (!(event.getWhoClicked() instanceof Player p)) {
+            return;
+        }
 
         String title = event.getView().getTitle();
 
         if (!title.equals(MENU) &&
                 !title.equals(SHOP) &&
-                !title.equals(CLANS)) return;
+                !title.equals(CLANS)) {
+            return;
+        }
 
         event.setCancelled(true);
 
         ItemStack item = event.getCurrentItem();
-        if (item == null || !item.hasItemMeta()) return;
+        if (item == null || !item.hasItemMeta()) {
+            return;
+        }
 
         String name = item.getItemMeta().getDisplayName();
 
@@ -264,7 +279,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ItemMeta meta = item.getItemMeta();
 
         meta.setDisplayName(name);
-        meta.setLore(List.of("§7Preço: §a$" + price, "§eClique para comprar"));
+        meta.setLore(List.of(
+                "§7Preço: §a$" + price,
+                "§eClique para comprar"
+        ));
 
         item.setItemMeta(meta);
         return item;
@@ -282,7 +300,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         items.put("§5Obsidiana", new Object[]{Material.OBSIDIAN, 80.0});
 
         Object[] data = items.get(name);
-        if (data == null) return;
+        if (data == null) {
+            return;
+        }
 
         Material material = (Material) data[0];
         double price = (double) data[1];
@@ -310,8 +330,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             String label,
             String[] args
     ) {
-        if (!(sender instanceof Player p) &&
-                !command.getName().equalsIgnoreCase("setmoney")) {
+        Player p = (sender instanceof Player player) ? player : null;
+
+        if (p == null && !command.getName().equalsIgnoreCase("setmoney")) {
             sender.sendMessage("Este comando é para jogadores.");
             return true;
         }
@@ -337,6 +358,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 tpa.put(target.getUniqueId(), p.getUniqueId());
+
                 msg(p, "Pedido enviado para " + target.getName());
                 msg(target, p.getName() + " pediu teleporte. Use /tpaccept ou /tpdeny.");
             }
@@ -373,11 +395,15 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 String path = "players." + id(p) + ".homes";
-                ConfigurationSection homes = getConfig().getConfigurationSection(path);
+                ConfigurationSection homes =
+                        getConfig().getConfigurationSection(path);
 
-                if (homes == null) homes = getConfig().createSection(path);
+                if (homes == null) {
+                    homes = getConfig().createSection(path);
+                }
 
-                if (!homes.contains(args[0]) && homes.getKeys(false).size() >= 5) {
+                if (!homes.contains(args[0]) &&
+                        homes.getKeys(false).size() >= 5) {
                     msg(p, "Você já tem 5 homes.");
                     return true;
                 }
@@ -413,14 +439,18 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 getConfig().set(
-                        "players." + id(p) + ".homes." + args[0], null
+                        "players." + id(p) + ".homes." + args[0],
+                        null
                 );
+
                 saveConfig();
                 msg(p, "Home apagada.");
             }
 
             case "setwarp" -> {
-                if (!p.hasPermission("csdprbsmc.admin")) return true;
+                if (!p.hasPermission("csdprbsmc.admin")) {
+                    return true;
+                }
 
                 if (args.length != 1) {
                     msg(p, "Use /setwarp <nome>");
@@ -450,7 +480,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
 
             case "delwarp" -> {
-                if (!p.hasPermission("csdprbsmc.admin")) return true;
+                if (!p.hasPermission("csdprbsmc.admin")) {
+                    return true;
+                }
 
                 if (args.length != 1) {
                     msg(p, "Use /delwarp <nome>");
@@ -478,7 +510,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 try {
                     double amount = Double.parseDouble(args[1]);
 
-                    if (amount <= 0 || money(p) < amount) {
+                    if (!Double.isFinite(amount) ||
+                            amount <= 0 ||
+                            money(p) < amount) {
                         msg(p, "Valor inválido ou saldo insuficiente.");
                         return true;
                     }
@@ -500,7 +534,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             case "topkills" -> showTop(p, "kills");
 
             case "setmoney" -> {
-                if (!sender.hasPermission("csdprbsmc.admin")) return true;
+                if (!sender.hasPermission("csdprbsmc.admin")) {
+                    sender.sendMessage("Você não tem permissão.");
+                    return true;
+                }
 
                 if (args.length != 2) {
                     sender.sendMessage("Use /setmoney <jogador> <valor>");
@@ -512,7 +549,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 try {
                     double amount = Double.parseDouble(args[1]);
 
-                    if (amount < 0) {
+                    if (!Double.isFinite(amount) || amount < 0) {
                         sender.sendMessage("Valor inválido.");
                         return true;
                     }
@@ -541,33 +578,41 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void showTop(Player p, String type) {
-        String path = "players";
-        ConfigurationSection section = getConfig().getConfigurationSection(path);
+        ConfigurationSection section =
+                getConfig().getConfigurationSection("players");
 
         if (section == null) {
             msg(p, "Ainda não há dados para o ranking.");
             return;
         }
 
-        List<String> entries = new ArrayList<>();
+        Map<String, Double> entries = new HashMap<>();
 
         for (String uuid : section.getKeys(false)) {
-            String name = getConfig().getString(path + "." + uuid + ".name", "Desconhecido");
-            double value = getConfig().getDouble(path + "." + uuid + "." + type);
+            String name = getConfig().getString(
+                    "players." + uuid + ".name",
+                    "Desconhecido"
+            );
 
-            entries.add(name + " : " + value);
+            double value = getConfig().getDouble(
+                    "players." + uuid + "." + type
+            );
+
+            entries.put(name, value);
         }
 
-        entries.sort((a, b) -> {
-            double va = Double.parseDouble(a.substring(a.lastIndexOf(":") + 1).trim());
-            double vb = Double.parseDouble(b.substring(b.lastIndexOf(":") + 1).trim());
-            return Double.compare(vb, va);
-        });
+        List<Map.Entry<String, Double>> sorted =
+                new ArrayList<>(entries.entrySet());
+
+        sorted.sort(Map.Entry.<String, Double>comparingByValue().reversed());
 
         msg(p, "§e§lTOP 10 " + type.toUpperCase());
 
-        for (int i = 0; i < Math.min(10, entries.size()); i++) {
-            msg(p, "§6#" + (i + 1) + " §f" + entries.get(i));
+        for (int i = 0; i < Math.min(10, sorted.size()); i++) {
+            Map.Entry<String, Double> entry = sorted.get(i);
+
+            msg(p, "§6#" + (i + 1) + " §f" +
+                    entry.getKey() + " : " + entry.getValue());
         }
     }
 
@@ -582,7 +627,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             return;
         }
 
-        String ownClan = getConfig().getString("players." + id(p) + ".clan");
+        String ownClan = getConfig().getString(
+                "players." + id(p) + ".clan"
+        );
 
         switch (args[0].toLowerCase()) {
             case "criar" -> {
@@ -599,7 +646,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 getConfig().set("clans." + clan + ".leader", id(p));
-                getConfig().set("clans." + clan + ".members", List.of(id(p)));
+                getConfig().set(
+                        "clans." + clan + ".members",
+                        List.of(id(p))
+                );
                 getConfig().set("players." + id(p) + ".clan", clan);
                 saveConfig();
 
@@ -612,20 +662,28 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                if (!getConfig().getString("clans." + ownClan + ".leader").equals(id(p))) {
+                String leaderId = getConfig().getString(
+                        "clans." + ownClan + ".leader"
+                );
+
+                if (!id(p).equals(leaderId)) {
                     msg(p, "Somente o líder pode convidar.");
                     return;
                 }
 
                 Player target = Bukkit.getPlayerExact(args[1]);
 
-                if (target == null || getConfig().getString(
-                        "players." + id(target) + ".clan") != null) {
+                if (target == null ||
+                        getConfig().getString(
+                                "players." + id(target) + ".clan"
+                        ) != null) {
                     msg(p, "Jogador inválido ou já possui clan.");
                     return;
                 }
 
-                List<String> members = getConfig().getStringList("clans." + ownClan + ".members");
+                List<String> members = getConfig().getStringList(
+                        "clans." + ownClan + ".members"
+                );
 
                 if (members.size() >= 8) {
                     msg(p, "O clan já tem 8 membros.");
@@ -633,6 +691,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 clanInvites.put(target.getUniqueId(), p.getUniqueId());
+
                 msg(target, "Convite de clan recebido. Use /clan aceitar.");
                 msg(p, "Convite enviado.");
             }
@@ -652,8 +711,25 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                String clan = getConfig().getString("players." + id(leader) + ".clan");
-                List<String> members = getConfig().getStringList("clans." + clan + ".members");
+                String clan = getConfig().getString(
+                        "players." + id(leader) + ".clan"
+                );
+
+                if (clan == null) {
+                    msg(p, "Esse clan não está mais disponível.");
+                    return;
+                }
+
+                if (getConfig().getString(
+                        "players." + id(p) + ".clan"
+                ) != null) {
+                    msg(p, "Você já está em um clan.");
+                    return;
+                }
+
+                List<String> members = getConfig().getStringList(
+                        "clans." + clan + ".members"
+                );
 
                 if (members.size() >= 8) {
                     msg(p, "O clan está cheio.");
@@ -661,6 +737,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 members.add(id(p));
+
                 getConfig().set("clans." + clan + ".members", members);
                 getConfig().set("players." + id(p) + ".clan", clan);
                 saveConfig();
@@ -674,14 +751,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                String leader = getConfig().getString("clans." + ownClan + ".leader");
+                String leader = getConfig().getString(
+                        "clans." + ownClan + ".leader"
+                );
 
                 if (id(p).equals(leader)) {
                     msg(p, "O líder precisa transferir a liderança ou dissolver o clan.");
                     return;
                 }
 
-                List<String> members = getConfig().getStringList("clans." + ownClan + ".members");
+                List<String> members = getConfig().getStringList(
+                        "clans." + ownClan + ".members"
+                );
+
                 members.remove(id(p));
 
                 getConfig().set("clans." + ownClan + ".members", members);
@@ -697,22 +779,34 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                List<String> members = getConfig().getStringList("clans." + ownClan + ".members");
-                msg(p, "Clan: §e" + ownClan + " §f| Membros: " + members.size() + "/8");
+                List<String> members = getConfig().getStringList(
+                        "clans." + ownClan + ".members"
+                );
+
+                msg(p, "Clan: §e" + ownClan +
+                        " §f| Membros: " + members.size() + "/8");
             }
 
             case "expulsar" -> {
-                if (args.length != 2 || ownClan == null) return;
+                if (args.length != 2 || ownClan == null) {
+                    return;
+                }
 
-                if (!getConfig().getString("clans." + ownClan + ".leader").equals(id(p))) {
+                String leader = getConfig().getString(
+                        "clans." + ownClan + ".leader"
+                );
+
+                if (!id(p).equals(leader)) {
                     msg(p, "Somente o líder pode expulsar.");
                     return;
                 }
 
                 Player target = Bukkit.getPlayerExact(args[1]);
 
-                if (target == null || !ownClan.equals(
-                        getConfig().getString("players." + id(target) + ".clan"))) {
+                if (target == null ||
+                        !ownClan.equals(getConfig().getString(
+                                "players." + id(target) + ".clan"
+                        ))) {
                     msg(p, "Jogador não encontrado no seu clan.");
                     return;
                 }
@@ -722,7 +816,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                List<String> members = getConfig().getStringList("clans." + ownClan + ".members");
+                List<String> members = getConfig().getStringList(
+                        "clans." + ownClan + ".members"
+                );
+
                 members.remove(id(target));
 
                 getConfig().set("clans." + ownClan + ".members", members);
@@ -736,4 +833,5 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             default -> msg(p, "Comando inválido. Use /clan ajuda.");
         }
     }
-    }
+}
+
