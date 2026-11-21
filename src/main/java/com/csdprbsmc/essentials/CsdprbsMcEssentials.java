@@ -240,6 +240,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void money(Player p, double amount) {
         getConfig().set("players." + id(p) + ".money", amount);
         saveConfig();
+        refreshPlayerTags();
     }
 
     private void addMoney(Player p, double amount) {
@@ -369,8 +370,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             String path = "players." + id(killer) + ".kills";
 
             getConfig().set(path, getConfig().getInt(path) + 1);
+            saveConfig();
             addMoney(killer, 10);
-
+            refreshPlayerTags();
             msg(killer, "Você ganhou §a$10 §fe uma kill!");
         }
 
@@ -398,8 +400,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ConfigurationSection players = getConfig().getConfigurationSection("players");
         if (players == null) return -1;
         List<Map.Entry<String, Double>> sorted = new ArrayList<>();
-        for (String uuid : players.getKeys(false))
-            sorted.add(Map.entry(uuid, getConfig().getDouble("players." + uuid + "." + stat)));
+        for (String uuid : players.getKeys(false)) {
+            double value = getConfig().getDouble("players." + uuid + "." + stat);
+            if (value > 0) sorted.add(Map.entry(uuid, value));
+        }
         sorted.sort(Map.Entry.<String, Double>comparingByValue().reversed());
         for (int i = 0; i < sorted.size(); i++) if (sorted.get(i).getKey().equals(id(player))) return i + 1;
         return -1;
@@ -422,6 +426,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         for (String entry : new HashSet<>(team.getEntries())) team.removeEntry(entry);
         team.setPrefix(prefix.length() > 64 ? prefix.substring(0, 64) : prefix);
         team.setSuffix(rank);
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.ALWAYS);
         team.addEntry(player.getName());
         player.setCustomName(null);
         player.setCustomNameVisible(false);
