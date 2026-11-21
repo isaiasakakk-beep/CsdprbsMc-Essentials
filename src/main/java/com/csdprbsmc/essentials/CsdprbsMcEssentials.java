@@ -502,19 +502,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             return;
         }
 
+        ItemStack[] inventoryBefore = p.getInventory().getStorageContents();
+        for (int i = 0; i < inventoryBefore.length; i++) {
+            if (inventoryBefore[i] != null) inventoryBefore[i] = inventoryBefore[i].clone();
+        }
         Map<Integer, ItemStack> leftovers = p.getInventory().addItem(new ItemStack(product.material(), amount));
         if (!leftovers.isEmpty()) {
-            // Segurança adicional: se o inventário mudou durante a operação, não cobrar.
-            int inserted = amount - leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
-            int toRemove = inserted;
-            for (int slot = 0; slot < p.getInventory().getStorageContents().length && toRemove > 0; slot++) {
-                ItemStack current = p.getInventory().getItem(slot);
-                if (current == null || !current.isSimilar(sample)) continue;
-                int remove = Math.min(toRemove, current.getAmount());
-                current.setAmount(current.getAmount() - remove);
-                if (current.getAmount() <= 0) p.getInventory().setItem(slot, null);
-                toRemove -= remove;
-            }
+            p.getInventory().setStorageContents(inventoryBefore);
             msg(p, "A compra foi cancelada por falta de espaço. Nenhum valor foi cobrado.");
             return;
         }
