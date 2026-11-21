@@ -469,12 +469,58 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equals(name)).findFirst().orElse(null);}
 
-    private void buyProduct(Player p,ShopProduct product,int amount){
-        if(product.limited())amount=1;double total=product.price()*amount;
-        if(!Double.isFinite(total)||money(p)<total){msg(p,"Saldo insuficiente. Preço: $"+total);return;}
-        Map<Integer,ItemStack> leftovers=p.getInventory().addItem(new ItemStack(product.material(),amount));
-        if(!leftovers.isEmpty()){msg(p,"Espaço insuficiente no inventário.");return;}
-        money(p,money(p)-total);msg(p,"Compra realizada: "+amount+"x "+product.name()+" por $"+total+".");
+    private void buyProduct(Player p, ShopProduct product, int amount) {
+        if (product == null || amount < 1) return;
+        if (product.limited()) amount = 1;
+
+        int maxStack = product.material().getMaxStackSize();
+        if (amount > maxStack) {
+            msg(p, "Quantidade acima do limite por compra.");
+            return;
+        }
+
+        double total = product.price() * amount;
+        double balance = money(p);
+        if (!Double.isFinite(total) || total <= 0 || balance < total) {
+            msg(p, "Saldo insuficiente. Preço: $" + total);
+            return;
+        }
+
+        // Confere o espaço antes de inserir qualquer item para evitar compras parciais grátis.
+        int capacity = 0;
+        ItemStack sample = new ItemStack(product.material());
+        for (ItemStack content : p.getInventory().getStorageContents()) {
+            if (content == null || content.getType().isAir()) {
+                capacity += maxStack;
+            } else if (content.isSimilar(sample)) {
+                capacity += Math.max(0, content.getMaxStackSize() - content.getAmount());
+            }
+            if (capacity >= amount) break;
+        }
+        if (capacity < amount) {
+            msg(p, "Espaço insuficiente no inventário. Nenhum valor foi cobrado.");
+            return;
+        }
+
+        Map<Integer, ItemStack> leftovers = p.getInventory().addItem(new ItemStack(product.material(), amount));
+        if (!leftovers.isEmpty()) {
+            // Segurança adicional: se o inventário mudou durante a operação, não cobrar.
+            int inserted = amount - leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
+            int toRemove = inserted;
+            for (int slot = 0; slot < p.getInventory().getStorageContents().length && toRemove > 0; slot++) {
+                ItemStack current = p.getInventory().getItem(slot);
+                if (current == null || !current.isSimilar(sample)) continue;
+                int remove = Math.min(toRemove, current.getAmount());
+                current.setAmount(current.getAmount() - remove);
+                if (current.getAmount() <= 0) p.getInventory().setItem(slot, null);
+                toRemove -= remove;
+            }
+            msg(p, "A compra foi cancelada por falta de espaço. Nenhum valor foi cobrado.");
+            return;
+        }
+
+        money(p, balance - total);
+        msg(p, "Compra realizada: " + amount + "x " + product.name() + " por $" + total + ".");
     }
 
     private void sendTpa(Player p,Player target){
