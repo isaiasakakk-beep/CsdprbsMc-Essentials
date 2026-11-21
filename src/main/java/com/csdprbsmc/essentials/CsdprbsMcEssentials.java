@@ -14,6 +14,8 @@ import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -385,15 +387,41 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private String playerTag(Player player) {
         String clan = getConfig().getString("players." + id(player) + ".clan");
-        String clanTag = clan == null ? "" : " §f§e§l" + clan.toUpperCase(Locale.ROOT) + "§f";
+        String clanTag = clan == null ? "" : " §f§l" + clan.toUpperCase(Locale.ROOT);
         return memberTag() + clanTag;
     }
 
+    private int rankOf(Player player, String stat) {
+        ConfigurationSection players = getConfig().getConfigurationSection("players");
+        if (players == null) return -1;
+        List<Map.Entry<String, Double>> sorted = new ArrayList<>();
+        for (String uuid : players.getKeys(false))
+            sorted.add(Map.entry(uuid, getConfig().getDouble("players." + uuid + "." + stat)));
+        sorted.sort(Map.Entry.<String, Double>comparingByValue().reversed());
+        for (int i = 0; i < sorted.size(); i++) if (sorted.get(i).getKey().equals(id(player))) return i + 1;
+        return -1;
+    }
+
+    private String rankingTag(Player player) {
+        int kills = rankOf(player, "kills"), money = rankOf(player, "money");
+        if (kills > 0 && kills <= 3) return " §6§lK" + kills;
+        if (money > 0 && money <= 3) return " §e§l$" + money;
+        return "";
+    }
+
     private void updatePlayerTag(Player player) {
-        String prefix = playerTag(player);
+        String prefix = playerTag(player), rank = rankingTag(player);
         tagCache.put(player.getUniqueId(), prefix);
-        player.setCustomName(prefix + " §f§l" + player.getName());
-        player.setCustomNameVisible(true);
+        Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
+        String teamName = "csd" + player.getUniqueId().toString().replace("-", "").substring(0, 12);
+        Team team = board.getTeam(teamName);
+        if (team == null) team = board.registerNewTeam(teamName);
+        for (String entry : new HashSet<>(team.getEntries())) team.removeEntry(entry);
+        team.setPrefix(prefix.length() > 64 ? prefix.substring(0, 64) : prefix);
+        team.setSuffix(rank);
+        team.addEntry(player.getName());
+        player.setCustomName(null);
+        player.setCustomNameVisible(false);
     }
 
     private void refreshPlayerTags() {
@@ -459,10 +487,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             Player target = Bukkit.getPlayerExact(name.substring(2));
             if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
             sendTpa(p, target); p.closeInventory();
+        } else if (title.equals(TPA_MENU) && name.equals("§e§lPEDIDOS RECEBIDOS")) {
+            openTpaRequests(p);
+        } else if (title.equals(TPA_MENU) && name.equals("§e§lMEUS PEDIDOS")) {
+            cancelOutgoingTpa(p); openTpaMenu(p);
         } else if (title.equals(TPA_REQUEST_MENU)) {
             if (name.equals("§a§lACEITAR PEDIDO")) respondTpa(p, true);
             else if (name.equals("§c§lRECUSAR PEDIDO")) respondTpa(p, false);
-            else if (name.equals("§c§lCANCELAR PEDIDO")) cancelOutgoingTpa(p);
             else if (name.equals(BACK_BUTTON)) openTpaMenu(p);
         } else if (title.equals(HOME_MENU)) {
             if (name.equals("§a§lCRIAR HOME")) { createNextHome(p); openHomeMenu(p); }
@@ -489,7 +520,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
             }
         } else if (title.equals(CLANS)) {
-            p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
+            p.closeInventory();
+            if (name.equals("§e§lCRIAR CLAN")) msg(p, "Use /clan criar <nome>.");
+            else if (name.equals("§a§lCONVIDAR JOGADOR")) msg(p, "Use /clan convidar <jogador>.");
+            else if (name.equals("§a§lACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
+            else if (name.equals("§e§lINFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
         } else if (title.equals(SHOP)) buy(p, name);
     }
 
@@ -540,6 +575,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(10, button(Material.ENDER_PEARL, "§a§lTELEPORTAR"));
         inv.setItem(13, button(Material.COMPASS, "§e§lEDITAR LOCAL"));
         inv.setItem(16, button(Material.BARRIER, "§c§lAPAGAR HOME"));
+        inv.setItem(22, button(Material.PAPER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void openTpaRequests(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, TPA_REQUEST_MENU);
+        UUID requesterId = tpa.get(p.getUniqueId());
+        Player requester = requesterId == null ? null : Bukkit.getPlayer(requesterId);
+        if (requester != null) {
+            inv.setItem(11, button(Material.LIME_WOOL, "§a§lACEITAR PEDIDO"));
+            inv.setItem(15, button(Material.RED_WOOL, "§c§lRECUSAR PEDIDO"));
+            inv.setItem(13, button(Material.PLAYER_HEAD, "§fPedido de: " + requester.getName()));
+        } else inv.setItem(13, button(Material.BARRIER, "§cNenhum pedido pendente"));
         inv.setItem(22, button(Material.PAPER, BACK_BUTTON));
         p.openInventory(inv);
     }
@@ -644,6 +692,52 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         msg(p, "Compra realizada: " + amount + "x " + product.name() + " por $" + total + ".");
     }
 
+    private void respondTpa(Player target, boolean accept) {
+        UUID requesterId = tpa.remove(target.getUniqueId());
+        Long created = tpaCreated.remove(target.getUniqueId());
+        if (requesterId == null || created == null) { msg(target, "Você não tem pedidos."); openTpaRequests(target); return; }
+        Player requester = Bukkit.getPlayer(requesterId);
+        if (System.currentTimeMillis() - created > 60_000L || requester == null) {
+            msg(target, "Pedido expirado ou jogador offline."); openTpaMenu(target); return;
+        }
+        if (accept) { requester.teleport(target.getLocation()); msg(target, "Pedido aceito."); msg(requester, "Seu pedido foi aceito."); }
+        else { msg(target, "Pedido recusado."); msg(requester, "Seu pedido foi recusado."); }
+        openTpaMenu(target);
+    }
+
+    private void cancelOutgoingTpa(Player requester) {
+        UUID targetId = tpa.entrySet().stream().filter(entry -> entry.getValue().equals(requester.getUniqueId()))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+        if (targetId == null) { msg(requester, "Você não tem pedido enviado pendente."); return; }
+        tpa.remove(targetId); tpaCreated.remove(targetId); msg(requester, "Pedido cancelado.");
+    }
+
+    private void sellHand(Player p) {
+        ItemStack hand = p.getInventory().getItemInMainHand();
+        if (hand == null || hand.getType().isAir()) { msg(p, "Segure o item que deseja vender."); return; }
+        ShopProduct product = SHOP_PRODUCTS.stream().filter(item -> item.material() == hand.getType()).findFirst().orElse(null);
+        if (product == null) { msg(p, "Esse item não é aceito pela loja."); return; }
+        int amount = hand.getAmount();
+        double total = Math.floor(product.price() * 0.5 * amount * 100.0) / 100.0;
+        p.getInventory().setItemInMainHand(null); addMoney(p, total);
+        msg(p, "Você vendeu " + amount + "x " + product.name() + " por $" + total + ".");
+    }
+
+    private void sellAll(Player p) {
+        int sold = 0; double total = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack item = p.getInventory().getItem(slot);
+            if (item == null || item.getType().isAir()) continue;
+            ShopProduct product = SHOP_PRODUCTS.stream().filter(entry -> entry.material() == item.getType()).findFirst().orElse(null);
+            if (product == null) continue;
+            sold += item.getAmount(); total += product.price() * 0.5 * item.getAmount();
+            p.getInventory().setItem(slot, null);
+        }
+        total = Math.floor(total * 100.0) / 100.0;
+        if (sold == 0) { msg(p, "Você não possui itens aceitos pela loja."); return; }
+        addMoney(p, total); msg(p, "Você vendeu " + sold + " itens por $" + total + ".");
+    }
+
     private void sendTpa(Player p,Player target){
         if(target==null||target.equals(p)||!target.isOnline()){msg(p,"Jogador inválido.");return;}
         tpa.put(target.getUniqueId(),p.getUniqueId());tpaCreated.put(target.getUniqueId(),System.currentTimeMillis());
@@ -652,15 +746,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openClanMenu(Player p) {
-        if (isBedrock(p)) {
-            openBedrockSelection(p, "CLANS", "Comandos disponíveis:",
-                    List.of("Criar clan: /clan criar <nome>", "Convidar: /clan convidar <jogador>",
-                            "Aceitar convite: /clan aceitar", "Informações: /clan info", "Sair: /clan sair", "Voltar"),
-                    index -> openMenu(p));
-            return;
-        }
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
-        inv.setItem(13, button(Material.NAME_TAG, "§e§lCOMANDOS DE CLAN"));
+        inv.setItem(10, button(Material.NAME_TAG, "§e§lCRIAR CLAN"));
+        inv.setItem(12, button(Material.PLAYER_HEAD, "§a§lCONVIDAR JOGADOR"));
+        inv.setItem(14, button(Material.EMERALD, "§a§lACEITAR CONVITE"));
+        inv.setItem(16, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
 
