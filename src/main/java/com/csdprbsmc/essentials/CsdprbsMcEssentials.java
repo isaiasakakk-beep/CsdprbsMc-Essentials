@@ -411,9 +411,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private String rankingTag(Player player) {
         int kills = rankOf(player, "kills"), money = rankOf(player, "money");
-        if (kills > 0 && kills <= 3) return " §6§lK" + kills;
-        if (money > 0 && money <= 3) return " §e§l$" + money;
-        return "";
+        String tag = "";
+        if (kills > 0 && kills <= 3) tag += " §6§lTOP" + kills + "-K";
+        if (money > 0 && money <= 3) tag += " §e§lTOP" + money + "-$";
+        return tag;
     }
 
     private void updatePlayerTag(Player player) {
@@ -490,7 +491,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
         String name = item.getItemMeta().getDisplayName();
-        if (name.equals(BACK_BUTTON)) { if (title.startsWith(SHOP_CATEGORY_PREFIX)) openShop(p); else openMenu(p); return; }
+        if (name.equals(BACK_BUTTON)) {
+            if (title.startsWith(SHOP_CATEGORY_PREFIX)) openShop(p);
+            else if (title.equals(HOME_ACTION_MENU)) openHomeMenu(p);
+            else if (title.equals(TPA_REQUEST_MENU)) openTpaMenu(p);
+            else openMenu(p);
+            return;
+        }
 
         if (title.equals(MENU)) {
             switch (name) {
