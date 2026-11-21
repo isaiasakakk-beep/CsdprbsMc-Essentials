@@ -221,7 +221,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 .button("CLANS")
                 .button("RANKINGS")
                 .button("LOJA/ECONOMIA")
-                .validResultHandler((response) -> {
+                .validResultHandler((form, response) -> {
                     switch (response.clickedButtonId()) {
                         case 0 -> msg(p, "Use /tpa <jogador>");
                         case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
@@ -246,7 +246,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 .content("Saldo: $" + money(p));
         String[] labels = {"Ferro - $20", "Ouro - $35", "Diamante - $150", "Esmeralda - $100", "Madeira - $10", "Pão - $8", "Obsidiana - $80"};
         for (String label : labels) builder.button(label);
-        builder.validResultHandler(response -> {
+        builder.validResultHandler((form, response) -> {
             String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
             int id = response.clickedButtonId();
             if (id >= 0 && id < names.length) buy(p, names[id]);
@@ -768,7 +768,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
                 getConfig().set("clan-invites." + id(p), null);
 
-                if (clan == null) {
+                if (clan == null || !getConfig().contains("clans." + clan)) {
                     msg(p, "Esse clan não está mais disponível.");
                     return;
                 }
