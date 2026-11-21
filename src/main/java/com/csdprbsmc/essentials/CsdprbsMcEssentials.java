@@ -352,7 +352,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openTpaMenu(Player p) {
-        List<Player> targets = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p))
+        List<? extends Player> targets = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p))
                 .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
         if (isBedrock(p)) {
             List<String> labels = targets.stream().map(Player::getName).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
