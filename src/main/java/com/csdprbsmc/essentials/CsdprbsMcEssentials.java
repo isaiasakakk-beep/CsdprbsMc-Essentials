@@ -291,6 +291,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void quit(PlayerQuitEvent event) {
         UUID leaving = event.getPlayer().getUniqueId();
         tagCache.remove(leaving);
+        pendingClanInput.remove(leaving);
+        selectedHomes.remove(leaving);
         event.getPlayer().setCustomName(null);
         event.getPlayer().setCustomNameVisible(false);
         tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
@@ -532,10 +534,15 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(CLANS)) {
             p.closeInventory();
-            if (name.equals("§e§lCRIAR CLAN")) msg(p, "Use /clan criar <nome>.");
-            else if (name.equals("§a§lCONVIDAR JOGADOR")) msg(p, "Use /clan convidar <jogador>.");
-            else if (name.equals("§a§lACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
+            if (name.equals("§e§lCRIAR CLAN")) {
+                pendingClanInput.put(p.getUniqueId(), "criar");
+                msg(p, "Digite no chat o nome do novo clan.");
+            } else if (name.equals("§a§lCONVIDAR JOGADOR")) {
+                pendingClanInput.put(p.getUniqueId(), "convidar");
+                msg(p, "Digite no chat o nome do jogador que deseja convidar.");
+            } else if (name.equals("§a§lACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
             else if (name.equals("§e§lINFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
+            else if (name.equals("§c§lSAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
         } else if (title.equals(SHOP)) buy(p, name);
     }
 
@@ -759,9 +766,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void openClanMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
         inv.setItem(10, button(Material.NAME_TAG, "§e§lCRIAR CLAN"));
-        inv.setItem(12, button(Material.PLAYER_HEAD, "§a§lCONVIDAR JOGADOR"));
-        inv.setItem(14, button(Material.EMERALD, "§a§lACEITAR CONVITE"));
-        inv.setItem(16, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
+        inv.setItem(11, button(Material.PLAYER_HEAD, "§a§lCONVIDAR JOGADOR"));
+        inv.setItem(13, button(Material.EMERALD, "§a§lACEITAR CONVITE"));
+        inv.setItem(15, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
+        inv.setItem(16, button(Material.OAK_DOOR, "§c§lSAIR DO CLAN"));
         inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
