@@ -31,6 +31,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Long> tpaCreated = new HashMap<>();
     private final Map<UUID, String> tagCache = new ConcurrentHashMap<>();
     private final Map<UUID, String> selectedHomes = new HashMap<>();
+    private final Map<UUID, String> pendingClanInput = new ConcurrentHashMap<>();
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -431,6 +432,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void formatChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
+        String pending = pendingClanInput.remove(source.getUniqueId());
+        if (pending != null) {
+            String input = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            event.setCancelled(true);
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!input.isBlank()) clanCommand(source, new String[]{pending, input});
+                else msg(source, "Entrada vazia. Abra o menu de clans e tente novamente.");
+            });
+            return;
+        }
         String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag());
         event.renderer((player, displayName, message, viewer) ->
                 LegacyComponentSerializer.legacySection()
