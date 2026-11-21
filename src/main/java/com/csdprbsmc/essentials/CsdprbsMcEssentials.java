@@ -30,6 +30,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
+    private String floodgatePrefix = ".";
 
     private static final String MENU = "§6§lCSDPRBSMC";
     private static final String SHOP = "§e§lLOJA";
@@ -172,6 +173,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             return;
         }
         try {
+            if (floodgate instanceof JavaPlugin floodgatePlugin) {
+                floodgatePrefix = floodgatePlugin.getConfig().getString("username-prefix", ".");
+            }
             Class<?> type = Class.forName("com.csdprbsmc.essentials.BedrockMenus");
             Object bridge = type.getConstructor().newInstance();
             type.getMethod("isBedrock", Player.class);
@@ -357,7 +361,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private boolean isBedrock(Player p) {
         Object result = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
-        return result instanceof Boolean value && value;
+        if (result instanceof Boolean value && value) return true;
+        return floodgatePrefix != null && !floodgatePrefix.isEmpty()
+                && p.getName().startsWith(floodgatePrefix);
     }
 
     private String memberTag() {
