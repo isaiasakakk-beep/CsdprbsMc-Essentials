@@ -13,8 +13,11 @@ import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.lang.reflect.Method;
 
@@ -23,6 +26,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private final Map<UUID, UUID> tpa = new HashMap<>();
     private final Map<UUID, Long> tpaCreated = new HashMap<>();
+    private final Map<UUID, String> tagCache = new ConcurrentHashMap<>();
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -59,7 +63,65 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         new ShopProduct(Material.FURNACE,"Fornalha",15,"Utilidades",false), new ShopProduct(Material.BUCKET,"Balde",40,"Utilidades",false),
         new ShopProduct(Material.WATER_BUCKET,"Balde de água",55,"Utilidades",false), new ShopProduct(Material.ANVIL,"Bigorna",180,"Utilidades",false),
         new ShopProduct(Material.ENDER_PEARL,"Pérola do Ender",60,"Especiais",true), new ShopProduct(Material.NAME_TAG,"Etiqueta",120,"Especiais",true),
-        new ShopProduct(Material.SADDLE,"Sela",150,"Especiais",true), new ShopProduct(Material.EXPERIENCE_BOTTLE,"Frasco de experiência",100,"Especiais",true)
+        new ShopProduct(Material.SADDLE,"Sela",150,"Especiais",true), new ShopProduct(Material.EXPERIENCE_BOTTLE,"Frasco de experiência",100,"Especiais",true),
+        new ShopProduct(Material.QUARTZ, "Quartzo", 18, "Minérios", false),
+        new ShopProduct(Material.AMETHYST_SHARD, "Fragmento de ametista", 22, "Minérios", false),
+        new ShopProduct(Material.RAW_COPPER, "Cobre bruto", 8, "Minérios", false),
+        new ShopProduct(Material.COPPER_BLOCK, "Bloco de cobre", 75, "Minérios", false),
+        new ShopProduct(Material.IRON_BLOCK, "Bloco de ferro", 175, "Minérios", false),
+        new ShopProduct(Material.GOLD_BLOCK, "Bloco de ouro", 300, "Minérios", false),
+        new ShopProduct(Material.DIAMOND_BLOCK, "Bloco de diamante", 1350, "Minérios", false),
+        new ShopProduct(Material.EMERALD_BLOCK, "Bloco de esmeralda", 900, "Minérios", false),
+        new ShopProduct(Material.NETHERITE_SCRAP, "Fragmento de netherita", 900, "Minérios", true),
+        new ShopProduct(Material.NETHERITE_INGOT, "Barra de netherita", 3600, "Minérios", true),
+        new ShopProduct(Material.OAK_PLANKS, "Tábuas de carvalho", 3, "Construção", false),
+        new ShopProduct(Material.SPRUCE_LOG, "Tronco de pinheiro", 10, "Construção", false),
+        new ShopProduct(Material.SPRUCE_PLANKS, "Tábuas de pinheiro", 3, "Construção", false),
+        new ShopProduct(Material.BIRCH_LOG, "Tronco de bétula", 10, "Construção", false),
+        new ShopProduct(Material.BIRCH_PLANKS, "Tábuas de bétula", 3, "Construção", false),
+        new ShopProduct(Material.STONE_BRICKS, "Tijolos de pedra", 8, "Construção", false),
+        new ShopProduct(Material.DEEPSLATE, "Ardósia", 5, "Construção", false),
+        new ShopProduct(Material.DEEPSLATE_BRICKS, "Tijolos de ardósia", 9, "Construção", false),
+        new ShopProduct(Material.ANDESITE, "Andesito", 4, "Construção", false),
+        new ShopProduct(Material.DIORITE, "Diorito", 4, "Construção", false),
+        new ShopProduct(Material.GRANITE, "Granito", 4, "Construção", false),
+        new ShopProduct(Material.MOSS_BLOCK, "Bloco de musgo", 15, "Construção", false),
+        new ShopProduct(Material.GLASS_PANE, "Painel de vidro", 3, "Construção", false),
+        new ShopProduct(Material.WHITE_WOOL, "Lã branca", 12, "Construção", false),
+        new ShopProduct(Material.TERRACOTTA, "Terracota", 10, "Construção", false),
+        new ShopProduct(Material.MELON, "Melancia", 8, "Agricultura", false),
+        new ShopProduct(Material.MELON_SLICE, "Fatia de melancia", 2, "Agricultura", false),
+        new ShopProduct(Material.COCOA_BEANS, "Sementes de cacau", 5, "Agricultura", false),
+        new ShopProduct(Material.BAMBOO, "Bambu", 3, "Agricultura", false),
+        new ShopProduct(Material.CACTUS, "Cacto", 5, "Agricultura", false),
+        new ShopProduct(Material.KELP, "Alga", 3, "Agricultura", false),
+        new ShopProduct(Material.NETHER_WART, "Fungo do Nether", 14, "Agricultura", false),
+        new ShopProduct(Material.BROWN_MUSHROOM, "Cogumelo marrom", 4, "Agricultura", false),
+        new ShopProduct(Material.RED_MUSHROOM, "Cogumelo vermelho", 4, "Agricultura", false),
+        new ShopProduct(Material.HONEYCOMB, "Favo de mel", 18, "Agricultura", false),
+        new ShopProduct(Material.COOKED_PORKCHOP, "Costeleta assada", 16, "Alimentos", false),
+        new ShopProduct(Material.COOKED_MUTTON, "Carneiro assado", 15, "Alimentos", false),
+        new ShopProduct(Material.COOKED_RABBIT, "Coelho assado", 14, "Alimentos", false),
+        new ShopProduct(Material.COOKIE, "Biscoito", 3, "Alimentos", false),
+        new ShopProduct(Material.CAKE, "Bolo", 45, "Alimentos", false),
+        new ShopProduct(Material.PUMPKIN_PIE, "Torta de abóbora", 18, "Alimentos", false),
+        new ShopProduct(Material.GOLDEN_APPLE, "Maçã dourada", 180, "Alimentos", true),
+        new ShopProduct(Material.DRIED_KELP, "Alga seca", 3, "Alimentos", false),
+        new ShopProduct(Material.ARROW, "Flecha", 4, "Utilidades", false),
+        new ShopProduct(Material.SHIELD, "Escudo", 90, "Utilidades", false),
+        new ShopProduct(Material.FISHING_ROD, "Vara de pesca", 35, "Utilidades", false),
+        new ShopProduct(Material.SHEARS, "Tesoura", 35, "Utilidades", false),
+        new ShopProduct(Material.FLINT_AND_STEEL, "Pederneira", 40, "Utilidades", false),
+        new ShopProduct(Material.COMPASS, "Bússola", 50, "Utilidades", false),
+        new ShopProduct(Material.CLOCK, "Relógio", 65, "Utilidades", false),
+        new ShopProduct(Material.LEAD, "Laço", 30, "Utilidades", false),
+        new ShopProduct(Material.ITEM_FRAME, "Moldura", 20, "Utilidades", false),
+        new ShopProduct(Material.ENDER_CHEST, "Baú do Ender", 500, "Utilidades", true),
+        new ShopProduct(Material.TOTEM_OF_UNDYING, "Totem da imortalidade", 1800, "Especiais", true),
+        new ShopProduct(Material.ELYTRA, "Élitros", 5000, "Especiais", true),
+        new ShopProduct(Material.SHULKER_SHELL, "Casco de shulker", 650, "Especiais", true),
+        new ShopProduct(Material.TRIDENT, "Tridente", 2400, "Especiais", true),
+        new ShopProduct(Material.HEART_OF_THE_SEA, "Coração do mar", 1200, "Especiais", true)
     );
 
     @Override
@@ -212,6 +274,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void quit(PlayerQuitEvent event) {
         UUID leaving = event.getPlayer().getUniqueId();
+        tagCache.remove(leaving);
+        event.getPlayer().setCustomName(null);
+        event.getPlayer().setCustomNameVisible(false);
         tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
         tpaCreated.keySet().removeIf(target -> !tpa.containsKey(target));
     }
@@ -222,6 +287,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         Bukkit.getScheduler().runTask(this, () -> {
             giveCompass(p);
+            updatePlayerTag(p);
 
             getConfig().set(
                     "players." + id(p) + ".name",
@@ -290,7 +356,39 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private boolean isBedrock(Player p) {
-        return Boolean.TRUE.equals(invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p));
+        Object result = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
+        return result instanceof Boolean value && value;
+    }
+
+    private String memberTag() {
+        return "§f『§e§lM§0§lE§e§lM§0§lB§e§lR§0§lO§f』";
+    }
+
+    private String playerTag(Player player) {
+        String clan = getConfig().getString("players." + id(player) + ".clan");
+        String clanTag = clan == null ? "" : " §f『§e§l" + clan.toUpperCase(Locale.ROOT) + "§f』";
+        return memberTag() + clanTag;
+    }
+
+    private void updatePlayerTag(Player player) {
+        String prefix = playerTag(player);
+        tagCache.put(player.getUniqueId(), prefix);
+        player.setCustomName(prefix + " §f§l" + player.getName());
+        player.setCustomNameVisible(true);
+    }
+
+    private void refreshPlayerTags() {
+        for (Player online : Bukkit.getOnlinePlayers()) updatePlayerTag(online);
+    }
+
+    @EventHandler
+    public void formatChat(AsyncChatEvent event) {
+        Player source = event.getPlayer();
+        String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag());
+        event.renderer((player, displayName, message, viewer) ->
+                LegacyComponentSerializer.legacySection()
+                        .deserialize(prefix + " §f§l" + player.getName() + "§r: ")
+                        .append(message));
     }
 
     private void openMenu(Player p) {
@@ -302,12 +400,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
 
-        inv.setItem(10, button(Material.ENDER_PEARL, "§0§lTPA"));
-        inv.setItem(11, button(Material.RED_BED, "§e§lHOME"));
-        inv.setItem(12, button(Material.ENDER_EYE, "§0§lWARPS"));
-        inv.setItem(13, button(Material.NAME_TAG, "§e§lCLANS"));
-        inv.setItem(14, button(Material.GOLD_INGOT, "§0§lRANKINGS"));
-        inv.setItem(15, button(Material.EMERALD, "§e§lLOJA/ECONOMIA"));
+        inv.setItem(10, button(Material.ENDER_PEARL, "§f『§0§lTPA§f』"));
+        inv.setItem(11, button(Material.RED_BED, "§f『§e§lHOME§f』"));
+        inv.setItem(12, button(Material.ENDER_EYE, "§f『§0§lWARPS§f』"));
+        inv.setItem(13, button(Material.NAME_TAG, "§f『§e§lCLANS§f』"));
+        inv.setItem(14, button(Material.GOLD_INGOT, "§f『§0§lRANKINGS§f』"));
+        inv.setItem(15, button(Material.EMERALD, "§f『§e§lLOJA/ECONOMIA§f』"));
 
         p.openInventory(inv);
     }
@@ -335,12 +433,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         if (title.equals(MENU)) {
             switch (name) {
-                case "§0§lTPA" -> openTpaMenu(p);
-                case "§e§lHOME" -> openHomeMenu(p);
-                case "§0§lWARPS" -> openWarpMenu(p);
-                case "§e§lCLANS" -> openClanMenu(p);
-                case "§0§lRANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
-                case "§e§lLOJA/ECONOMIA" -> openShop(p);
+                case "§f『§0§lTPA§f』" -> openTpaMenu(p);
+                case "§f『§e§lHOME§f』" -> openHomeMenu(p);
+                case "§f『§0§lWARPS§f』" -> openWarpMenu(p);
+                case "§f『§e§lCLANS§f』" -> openClanMenu(p);
+                case "§f『§0§lRANKINGS§f』" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
+                case "§f『§e§lLOJA/ECONOMIA§f』" -> openShop(p);
             }
         } else if (title.equals(TPA_MENU) && name.startsWith("§a")) {
             Player target = Bukkit.getPlayerExact(name.substring(2));
@@ -360,7 +458,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(SHOP_CATEGORIES) && name.startsWith("§e")) {
             openShopCategory(p, name.substring(2));
         } else if (title.startsWith(SHOP_CATEGORY_PREFIX)) {
-            ShopProduct product = findProduct(name.replaceFirst("^§.", ""));
+            ShopProduct product = findProduct(name.replace("§f『§l", "").replace("§f』", "").replace("§r", ""));
             if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(CLANS)) {
             p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
@@ -479,7 +577,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
         for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
-            meta.setDisplayName("§f"+product.name());meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
+            meta.setDisplayName("§f『§l"+product.name()+"§f』");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
         inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
     }
 
@@ -914,7 +1012,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                         List.of(id(p))
                 );
                 getConfig().set("players." + id(p) + ".clan", clan);
-                saveConfig();
+                saveConfig(); refreshPlayerTags();
 
                 msg(p, "Clan criado!");
             }
@@ -954,7 +1052,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 getConfig().set("clan-invites." + id(target), ownClan);
-                saveConfig();
+                saveConfig(); refreshPlayerTags();
 
                 msg(target, "Convite de clan recebido. Use /clan aceitar.");
                 msg(p, "Convite enviado.");
@@ -969,7 +1067,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 if (!getConfig().contains("clans." + clan)) {
                     getConfig().set("clan-invites." + id(p), null);
-                    saveConfig();
+                    saveConfig(); refreshPlayerTags();
                     msg(p, "Esse clan não está mais disponível.");
                     return;
                 }
@@ -995,7 +1093,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 getConfig().set("clans." + clan + ".members", members);
                 getConfig().set("players." + id(p) + ".clan", clan);
-                saveConfig();
+                saveConfig(); refreshPlayerTags();
 
                 msg(p, "Você entrou no clan " + clan);
             }
@@ -1006,13 +1104,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 Player target = Bukkit.getPlayerExact(args[1]);
                 if (target == null || !ownClan.equals(getConfig().getString("players." + id(target) + ".clan"))) { msg(p, "O jogador precisa estar no seu clan e online."); return; }
                 getConfig().set("clans." + ownClan + ".leader", id(target));
-                saveConfig(); msg(p, "Liderança transferida para " + target.getName() + "."); msg(target, "Você agora é líder do clan.");
+                saveConfig(); refreshPlayerTags(); msg(p, "Liderança transferida para " + target.getName() + "."); msg(target, "Você agora é líder do clan.");
             }
 
             case "dissolver" -> {
                 if (ownClan == null || !id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) { msg(p, "Somente o líder pode dissolver o clan."); return; }
                 for (String member : getConfig().getStringList("clans." + ownClan + ".members")) getConfig().set("players." + member + ".clan", null);
-                getConfig().set("clans." + ownClan, null); saveConfig(); msg(p, "Clan dissolvido.");
+                getConfig().set("clans." + ownClan, null); saveConfig(); refreshPlayerTags(); msg(p, "Clan dissolvido.");
             }
 
             case "sair" -> {
@@ -1038,7 +1136,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 getConfig().set("clans." + ownClan + ".members", members);
                 getConfig().set("players." + id(p) + ".clan", null);
-                saveConfig();
+                saveConfig(); refreshPlayerTags();
 
                 msg(p, "Você saiu do clan.");
             }
@@ -1094,7 +1192,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 getConfig().set("clans." + ownClan + ".members", members);
                 getConfig().set("players." + id(target) + ".clan", null);
-                saveConfig();
+                saveConfig(); refreshPlayerTags();
 
                 msg(p, "Jogador expulso.");
                 msg(target, "Você foi removido do clan.");
