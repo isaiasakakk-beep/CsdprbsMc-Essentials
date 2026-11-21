@@ -1,39 +1,28 @@
-name: Build CsdprbsMc Essentials
+plugins {
+    id 'java'
+}
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+group = 'com.csdprbsmc'
+version = '1.0.0'
 
-permissions:
-  contents: read
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:26.3.build.+'
+}
 
-    steps:
-      - name: Baixar projeto
-        uses: actions/checkout@v4
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
 
-      - name: Instalar Java 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '25'
-
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.1.0'
-
-      - name: Compilar plugin
-        run: gradle clean build
-
-      - name: Guardar arquivo JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: CsdprbsMcEssentials
-          path: build/libs/*.jar
-          if-no-files-found: error
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
