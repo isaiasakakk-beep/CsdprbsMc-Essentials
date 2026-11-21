@@ -4,3 +4,47 @@ main: com.csdprbsmc.essentials.CsdprbsMcEssentials
 api-version: '26.3'
 author: CsdprbsMc
 description: Essentials para servidores semi-anarquia
+
+commands:
+  ess:
+    description: Abre o menu principal
+  tpa:
+    description: Solicita teleporte
+  tpaccept:
+    description: Aceita TPA
+  tpdeny:
+    description: Recusa TPA
+  sethome:
+    description: Salva uma home
+  home:
+    description: Teleporta para uma home
+  delhome:
+    description: Apaga uma home
+  setwarp:
+    description: Cria uma warp
+    permission: csdprbsmc.admin
+  warp:
+    description: Teleporta para uma warp
+  delwarp:
+    description: Apaga uma warp
+    permission: csdprbsmc.admin
+  clan:
+    description: Sistema de clans
+  bal:
+    description: Mostra seu dinheiro
+  pay:
+    description: Envia dinheiro
+  shop:
+    description: Abre a loja
+  topmoney:
+    description: Ranking de dinheiro
+  topkills:
+    description: Ranking de kills
+  setmoney:
+    description: Define o dinheiro de um jogador
+    permission: csdprbsmc.admin
+
+permissions:
+  csdprbsmc.admin:
+    description: Permissão administrativa do plugin
+    default: op
