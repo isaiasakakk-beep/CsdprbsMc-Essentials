@@ -12,18 +12,20 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import org.geysermc.floodgate.api.FloodgateApi;
-import org.geysermc.cumulus.form.SimpleForm;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
+import java.util.function.Consumer;
+import java.lang.reflect.Method;
 
 public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
 
     private final Map<UUID, UUID> tpa = new HashMap<>();
+    private final Map<UUID, Long> tpaCreated = new HashMap<>();
 
     private NamespacedKey compassKey;
+    private Object bedrockMenus;
 
     private static final String MENU = "§6§lCSDPRBSMC";
     private static final String SHOP = "§e§lLOJA";
@@ -34,6 +36,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveDefaultConfig();
 
         compassKey = new NamespacedKey(this, "main_compass");
+        initializeBedrockMenus();
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
@@ -58,6 +61,47 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @Override
     public void onDisable() {
         saveConfig();
+    }
+
+    private void initializeBedrockMenus() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("floodgate")) return;
+        try {
+            Class<?> type = Class.forName("com.csdprbsmc.essentials.BedrockMenus");
+            bedrockMenus = type.getConstructor().newInstance();
+            getLogger().info("Integração de formulários Bedrock ativada.");
+        } catch (Throwable error) {
+            bedrockMenus = null;
+            getLogger().warning("Floodgate detectado, mas os formulários não puderam ser ativados: " + error.getClass().getSimpleName());
+        }
+    }
+
+    private Object invokeBedrock(String method, Class<?>[] types, Object... args) {
+        if (bedrockMenus == null) return null;
+        try {
+            Method target = bedrockMenus.getClass().getMethod(method, types);
+            return target.invoke(bedrockMenus, args);
+        } catch (Throwable error) {
+            getLogger().warning("Falha na integração Bedrock (" + method + "): " + error.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private void handleBedrockChoice(Player p, int choice) {
+        switch (choice) {
+            case 0 -> msg(p, "Use /tpa <jogador>");
+            case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
+            case 2 -> msg(p, "Use /warp <nome>");
+            case 3 -> invokeBedrock("openClan", new Class<?>[]{Player.class}, p);
+            case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
+            case 5 -> invokeBedrock("openShop", new Class<?>[]{Player.class, double.class, Consumer.class},
+                    p, money(p), (Consumer<Integer>) index -> buyBedrockIndex(p, index));
+            default -> { }
+        }
+    }
+
+    private void buyBedrockIndex(Player p, int index) {
+        String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
+        if (index >= 0 && index < names.length) buy(p, names[index]);
     }
 
     private void msg(Player p, String text) {
@@ -120,6 +164,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     @EventHandler
+    public void quit(PlayerQuitEvent event) {
+        UUID leaving = event.getPlayer().getUniqueId();
+        tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
+        tpaCreated.keySet().removeIf(target -> !tpa.containsKey(target));
+    }
+
+    @EventHandler
     public void join(PlayerJoinEvent event) {
         Player p = event.getPlayer();
 
@@ -140,7 +191,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     @EventHandler
+    public void respawn(PlayerRespawnEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> giveCompass(event.getPlayer()));
+    }
+
+    @EventHandler
     public void interact(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
         if (isCompass(event.getItem())) {
             event.setCancelled(true);
             openMenu(event.getPlayer());
@@ -187,8 +244,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
-        if (isBedrock(p)) {
-            openBedrockMenu(p);
+        Object bedrock = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
+        if (Boolean.TRUE.equals(bedrock)) {
+            invokeBedrock("openMenu", new Class<?>[]{Player.class, Consumer.class},
+                    p, (Consumer<Integer>) choice -> handleBedrockChoice(p, choice));
             return;
         }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
@@ -201,57 +260,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(15, button(Material.EMERALD, "§e§lLOJA/ECONOMIA"));
 
         p.openInventory(inv);
-    }
-
-    private boolean isBedrock(Player p) {
-        try {
-            return FloodgateApi.getInstance().isFloodgatePlayer(p.getUniqueId());
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private void openBedrockMenu(Player p) {
-        SimpleForm form = SimpleForm.builder()
-                .title("CSDPRBSMC")
-                .content("Escolha uma opção")
-                .button("TPA")
-                .button("HOME")
-                .button("WARPS")
-                .button("CLANS")
-                .button("RANKINGS")
-                .button("LOJA/ECONOMIA")
-                .validResultHandler((submittedForm, response) -> {
-                    switch (response.clickedButtonId()) {
-                        case 0 -> msg(p, "Use /tpa <jogador>");
-                        case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
-                        case 2 -> msg(p, "Use /warp <nome>");
-                        case 3 -> openBedrockClanMenu(p);
-                        case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
-                        case 5 -> openBedrockShop(p);
-                    }
-                }).build();
-        FloodgateApi.getInstance().sendForm(p.getUniqueId(), form);
-    }
-
-    private void openBedrockClanMenu(Player p) {
-        SimpleForm form = SimpleForm.builder().title("CLANS")
-                .content("Use /clan ajuda para ver comandos de clan.")
-                .button("OK").build();
-        FloodgateApi.getInstance().sendForm(p.getUniqueId(), form);
-    }
-
-    private void openBedrockShop(Player p) {
-        SimpleForm.Builder builder = SimpleForm.builder().title("LOJA")
-                .content("Saldo: $" + money(p));
-        String[] labels = {"Ferro - $20", "Ouro - $35", "Diamante - $150", "Esmeralda - $100", "Madeira - $10", "Pão - $8", "Obsidiana - $80"};
-        for (String label : labels) builder.button(label);
-        builder.validResultHandler((form, response) -> {
-            String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
-            int id = response.clickedButtonId();
-            if (id >= 0 && id < names.length) buy(p, names[id]);
-        });
-        FloodgateApi.getInstance().sendForm(p.getUniqueId(), builder.build());
     }
 
     private ItemStack button(Material material, String name) {
@@ -419,16 +427,23 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 tpa.put(target.getUniqueId(), p.getUniqueId());
+                tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
 
-                msg(p, "Pedido enviado para " + target.getName());
+                msg(p, "Pedido enviado para " + target.getName() + ". Expira em 60 segundos.");
                 msg(target, p.getName() + " pediu teleporte. Use /tpaccept ou /tpdeny.");
             }
 
             case "tpaccept" -> {
                 UUID requesterId = tpa.remove(p.getUniqueId());
+                Long created = tpaCreated.remove(p.getUniqueId());
 
-                if (requesterId == null) {
+                if (requesterId == null || created == null) {
                     msg(p, "Você não tem pedidos.");
+                    return true;
+                }
+
+                if (System.currentTimeMillis() - created > 60_000L) {
+                    msg(p, "Esse pedido de teleporte expirou.");
                     return true;
                 }
 
@@ -446,6 +461,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
             case "tpdeny" -> {
                 tpa.remove(p.getUniqueId());
+                tpaCreated.remove(p.getUniqueId());
                 msg(p, "Pedido recusado.");
             }
 
@@ -455,6 +471,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!args[0].matches("[a-zA-Z0-9_-]{1,16}")) {
+                    msg(p, "Nome inválido. Use até 16 letras, números, _ ou -.");
+                    return true;
+                }
                 String path = "players." + id(p) + ".homes";
                 ConfigurationSection homes =
                         getConfig().getConfigurationSection(path);
@@ -499,11 +519,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
-                getConfig().set(
-                        "players." + id(p) + ".homes." + args[0],
-                        null
-                );
-
+                String homePath = "players." + id(p) + ".homes." + args[0];
+                if (!getConfig().contains(homePath)) {
+                    msg(p, "Home não encontrada.");
+                    return true;
+                }
+                getConfig().set(homePath, null);
                 saveConfig();
                 msg(p, "Home apagada.");
             }
@@ -518,6 +539,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!args[0].matches("[a-zA-Z0-9_-]{1,24}")) {
+                    msg(p, "Nome inválido. Use até 24 letras, números, _ ou -.");
+                    return true;
+                }
                 getConfig().set("warps." + args[0], p.getLocation());
                 saveConfig();
                 msg(p, "Warp criada.");
@@ -550,6 +575,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
+                if (!getConfig().contains("warps." + args[0])) {
+                    msg(p, "Warp não encontrada.");
+                    return true;
+                }
                 getConfig().set("warps." + args[0], null);
                 saveConfig();
                 msg(p, "Warp apagada.");
@@ -701,7 +730,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                String clan = args[1].toLowerCase();
+                String clan = args[1].toLowerCase(Locale.ROOT);
+                if (!clan.matches("[a-z0-9_]{3,16}")) {
+                    msg(p, "Nome inválido. Use 3 a 16 letras, números ou _.");
+                    return;
+                }
 
                 if (getConfig().contains("clans." + clan)) {
                     msg(p, "Esse clan já existe.");
@@ -736,7 +769,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 Player target = Bukkit.getPlayerExact(args[1]);
 
-                if (target == null ||
+                if (target == null || target.equals(p) ||
                         getConfig().getString(
                                 "players." + id(target) + ".clan"
                         ) != null) {
@@ -766,9 +799,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     msg(p, "Você não tem convites.");
                     return;
                 }
-                getConfig().set("clan-invites." + id(p), null);
 
-                if (clan == null || !getConfig().contains("clans." + clan)) {
+                if (!getConfig().contains("clans." + clan)) {
+                    getConfig().set("clan-invites." + id(p), null);
+                    saveConfig();
                     msg(p, "Esse clan não está mais disponível.");
                     return;
                 }
@@ -789,6 +823,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
+                getConfig().set("clan-invites." + id(p), null);
                 members.add(id(p));
 
                 getConfig().set("clans." + clan + ".members", members);
