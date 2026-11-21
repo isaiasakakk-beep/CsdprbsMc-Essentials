@@ -15,6 +15,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
+import java.util.function.Consumer;
+import java.lang.reflect.Method;
 
 public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
@@ -22,6 +24,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, UUID> tpa = new HashMap<>();
 
     private NamespacedKey compassKey;
+    private Object bedrockMenus;
 
     private static final String MENU = "§6§lCSDPRBSMC";
     private static final String SHOP = "§e§lLOJA";
@@ -32,6 +35,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveDefaultConfig();
 
         compassKey = new NamespacedKey(this, "main_compass");
+        initializeBedrockMenus();
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
@@ -56,6 +60,47 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @Override
     public void onDisable() {
         saveConfig();
+    }
+
+    private void initializeBedrockMenus() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("floodgate")) return;
+        try {
+            Class<?> type = Class.forName("com.csdprbsmc.essentials.BedrockMenus");
+            bedrockMenus = type.getConstructor().newInstance();
+            getLogger().info("Integração de formulários Bedrock ativada.");
+        } catch (Throwable error) {
+            bedrockMenus = null;
+            getLogger().warning("Floodgate detectado, mas os formulários não puderam ser ativados: " + error.getClass().getSimpleName());
+        }
+    }
+
+    private Object invokeBedrock(String method, Class<?>[] types, Object... args) {
+        if (bedrockMenus == null) return null;
+        try {
+            Method target = bedrockMenus.getClass().getMethod(method, types);
+            return target.invoke(bedrockMenus, args);
+        } catch (Throwable error) {
+            getLogger().warning("Falha na integração Bedrock (" + method + "): " + error.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private void handleBedrockChoice(Player p, int choice) {
+        switch (choice) {
+            case 0 -> msg(p, "Use /tpa <jogador>");
+            case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
+            case 2 -> msg(p, "Use /warp <nome>");
+            case 3 -> invokeBedrock("openClan", new Class<?>[]{Player.class}, p);
+            case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
+            case 5 -> invokeBedrock("openShop", new Class<?>[]{Player.class, double.class, Consumer.class},
+                    p, money(p), (Consumer<Integer>) index -> buyBedrockIndex(p, index));
+            default -> { }
+        }
+    }
+
+    private void buyBedrockIndex(Player p, int index) {
+        String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
+        if (index >= 0 && index < names.length) buy(p, names[index]);
     }
 
     private void msg(Player p, String text) {
@@ -186,6 +231,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
+        Object bedrock = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
+        if (Boolean.TRUE.equals(bedrock)) {
+            invokeBedrock("openMenu", new Class<?>[]{Player.class, Consumer.class},
+                    p, (Consumer<Integer>) choice -> handleBedrockChoice(p, choice));
+            return;
+        }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
 
         inv.setItem(10, button(Material.ENDER_PEARL, "§0§lTPA"));
