@@ -221,7 +221,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 .button("CLANS")
                 .button("RANKINGS")
                 .button("LOJA/ECONOMIA")
-                .validResultHandler((form, response) -> {
+                .validResultHandler((submittedForm, response) -> {
                     switch (response.clickedButtonId()) {
                         case 0 -> msg(p, "Use /tpa <jogador>");
                         case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
