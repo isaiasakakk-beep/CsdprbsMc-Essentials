@@ -30,6 +30,37 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String MENU = "§6§lCSDPRBSMC";
     private static final String SHOP = "§e§lLOJA";
     private static final String CLANS = "§e§lCLANS";
+    private static final String TPA_MENU = "§6§lTPA - JOGADORES";
+    private static final String HOME_MENU = "§6§lMINHAS HOMES";
+    private static final String WARP_MENU = "§6§lWARPS";
+    private static final String SHOP_CATEGORIES = "§e§lLOJA - CATEGORIAS";
+    private static final String SHOP_CATEGORY_PREFIX = "§e§lLOJA: ";
+    private static final String BACK_BUTTON = "§c§lVOLTAR";
+    private record ShopProduct(Material material, String name, double price, String category, boolean limited) {}
+    private static final List<String> SHOP_CATEGORIES_LIST = List.of("Minérios", "Construção", "Agricultura", "Alimentos", "Utilidades", "Especiais");
+    private static final List<ShopProduct> SHOP_PRODUCTS = List.of(
+        new ShopProduct(Material.COAL,"Carvão",8,"Minérios",false), new ShopProduct(Material.RAW_IRON,"Ferro bruto",16,"Minérios",false),
+        new ShopProduct(Material.IRON_INGOT,"Ferro",20,"Minérios",false), new ShopProduct(Material.RAW_GOLD,"Ouro bruto",28,"Minérios",false),
+        new ShopProduct(Material.GOLD_INGOT,"Ouro",35,"Minérios",false), new ShopProduct(Material.COPPER_INGOT,"Cobre",12,"Minérios",false),
+        new ShopProduct(Material.REDSTONE,"Redstone",12,"Minérios",false), new ShopProduct(Material.LAPIS_LAZULI,"Lápis-lazúli",15,"Minérios",false),
+        new ShopProduct(Material.EMERALD,"Esmeralda",100,"Minérios",false), new ShopProduct(Material.DIAMOND,"Diamante",150,"Minérios",false),
+        new ShopProduct(Material.COBBLESTONE,"Pedregulho",2,"Construção",false), new ShopProduct(Material.STONE,"Pedra",4,"Construção",false),
+        new ShopProduct(Material.OAK_LOG,"Tronco de carvalho",10,"Construção",false), new ShopProduct(Material.GLASS,"Vidro",6,"Construção",false),
+        new ShopProduct(Material.BRICKS,"Tijolos",20,"Construção",false), new ShopProduct(Material.SAND,"Areia",4,"Construção",false),
+        new ShopProduct(Material.GRAVEL,"Cascalho",4,"Construção",false), new ShopProduct(Material.OBSIDIAN,"Obsidiana",80,"Construção",false),
+        new ShopProduct(Material.WHEAT_SEEDS,"Sementes",2,"Agricultura",false), new ShopProduct(Material.WHEAT,"Trigo",5,"Agricultura",false),
+        new ShopProduct(Material.CARROT,"Cenoura",4,"Agricultura",false), new ShopProduct(Material.POTATO,"Batata",4,"Agricultura",false),
+        new ShopProduct(Material.BEETROOT_SEEDS,"Sementes de beterraba",3,"Agricultura",false), new ShopProduct(Material.SUGAR_CANE,"Cana-de-açúcar",6,"Agricultura",false),
+        new ShopProduct(Material.PUMPKIN,"Abóbora",12,"Agricultura",false), new ShopProduct(Material.BREAD,"Pão",8,"Alimentos",false),
+        new ShopProduct(Material.COOKED_BEEF,"Carne assada",18,"Alimentos",false), new ShopProduct(Material.COOKED_CHICKEN,"Frango assado",14,"Alimentos",false),
+        new ShopProduct(Material.BAKED_POTATO,"Batata assada",7,"Alimentos",false), new ShopProduct(Material.APPLE,"Maçã",6,"Alimentos",false),
+        new ShopProduct(Material.GOLDEN_CARROT,"Cenoura dourada",35,"Alimentos",false), new ShopProduct(Material.TORCH,"Tocha",2,"Utilidades",false),
+        new ShopProduct(Material.CHEST,"Baú",15,"Utilidades",false), new ShopProduct(Material.CRAFTING_TABLE,"Bancada",10,"Utilidades",false),
+        new ShopProduct(Material.FURNACE,"Fornalha",15,"Utilidades",false), new ShopProduct(Material.BUCKET,"Balde",40,"Utilidades",false),
+        new ShopProduct(Material.WATER_BUCKET,"Balde de água",55,"Utilidades",false), new ShopProduct(Material.ANVIL,"Bigorna",180,"Utilidades",false),
+        new ShopProduct(Material.ENDER_PEARL,"Pérola do Ender",60,"Especiais",true), new ShopProduct(Material.NAME_TAG,"Etiqueta",120,"Especiais",true),
+        new ShopProduct(Material.SADDLE,"Sela",150,"Especiais",true), new ShopProduct(Material.EXPERIENCE_BOTTLE,"Frasco de experiência",100,"Especiais",true)
+    );
 
     @Override
     public void onEnable() {
@@ -88,20 +119,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void handleBedrockChoice(Player p, int choice) {
         switch (choice) {
-            case 0 -> msg(p, "Use /tpa <jogador>");
-            case 1 -> msg(p, "Use /home <nome> ou /sethome <nome>");
-            case 2 -> msg(p, "Use /warp <nome>");
-            case 3 -> invokeBedrock("openClan", new Class<?>[]{Player.class}, p);
+            case 0 -> openTpaMenu(p);
+            case 1 -> openHomeMenu(p);
+            case 2 -> openWarpMenu(p);
+            case 3 -> openClanMenu(p);
             case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
-            case 5 -> invokeBedrock("openShop", new Class<?>[]{Player.class, double.class, Consumer.class},
-                    p, money(p), (Consumer<Integer>) index -> buyBedrockIndex(p, index));
+            case 5 -> openShop(p);
             default -> { }
         }
     }
 
-    private void buyBedrockIndex(Player p, int index) {
-        String[] names = {"§fFerro", "§6Ouro", "§bDiamante", "§aEsmeralda", "§6Madeira", "§ePão", "§5Obsidiana"};
-        if (index >= 0 && index < names.length) buy(p, names[index]);
+    private void openBedrockSelection(Player p, String title, String content, List<String> labels, Consumer<Integer> callback) {
+        invokeBedrock("openSelection", new Class<?>[]{Player.class, String.class, String.class, List.class, Consumer.class},
+                p, title, content, labels, callback);
     }
 
     private void msg(Player p, String text) {
@@ -272,124 +302,166 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void menuClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player p)) {
-            return;
-        }
-
+        if (!(event.getWhoClicked() instanceof Player p)) return;
         String title = event.getView().getTitle();
-
-        if (!title.equals(MENU) &&
-                !title.equals(SHOP) &&
-                !title.equals(CLANS)) {
-            return;
-        }
-
+        if (!title.equals(MENU) && !title.equals(SHOP) && !title.equals(CLANS)
+                && !title.equals(TPA_MENU) && !title.equals(HOME_MENU) && !title.equals(WARP_MENU)
+                && !title.equals(SHOP_CATEGORIES) && !title.startsWith(SHOP_CATEGORY_PREFIX)) return;
         event.setCancelled(true);
-
         ItemStack item = event.getCurrentItem();
-        if (item == null || !item.hasItemMeta()) {
-            return;
-        }
-
+        if (item == null || !item.hasItemMeta()) return;
         String name = item.getItemMeta().getDisplayName();
+        if (name.equals(BACK_BUTTON)) { openMenu(p); return; }
 
         if (title.equals(MENU)) {
             switch (name) {
-                case "§0§lTPA" -> {
-                    p.closeInventory();
-                    msg(p, "Use §e/tpa <jogador>");
-                }
-                case "§e§lHOME" -> {
-                    p.closeInventory();
-                    msg(p, "Use §e/home <nome> §fou §e/sethome <nome>");
-                }
-                case "§0§lWARPS" -> {
-                    p.closeInventory();
-                    msg(p, "Use §e/warp <nome>");
-                }
+                case "§0§lTPA" -> openTpaMenu(p);
+                case "§e§lHOME" -> openHomeMenu(p);
+                case "§0§lWARPS" -> openWarpMenu(p);
                 case "§e§lCLANS" -> openClanMenu(p);
-                case "§0§lRANKINGS" -> {
-                    p.closeInventory();
-                    showTop(p, "kills");
-                    showTop(p, "money");
-                }
+                case "§0§lRANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
                 case "§e§lLOJA/ECONOMIA" -> openShop(p);
             }
-        } else if (title.equals(SHOP)) {
-            buy(p, name);
+        } else if (title.equals(TPA_MENU) && name.startsWith("§a")) {
+            Player target = Bukkit.getPlayerExact(name.substring(2));
+            if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
+            sendTpa(p, target); p.closeInventory();
+        } else if (title.equals(HOME_MENU)) {
+            if (name.equals("§a§lCRIAR HOME")) { createNextHome(p); openHomeMenu(p); }
+            else if (name.startsWith("§aHOME: ")) {
+                String home = name.substring("§aHOME: ".length());
+                if (event.isShiftClick()) {
+                    getConfig().set("players." + id(p) + ".homes." + home, null);
+                    saveConfig(); msg(p, "Home " + home + " apagada."); openHomeMenu(p);
+                } else teleportHome(p, home);
+            }
+        } else if (title.equals(WARP_MENU) && name.startsWith("§b")) {
+            teleportWarp(p, name.substring(2));
+        } else if (title.equals(SHOP_CATEGORIES) && name.startsWith("§e")) {
+            openShopCategory(p, name.substring(2));
+        } else if (title.startsWith(SHOP_CATEGORY_PREFIX)) {
+            ShopProduct product = findProduct(name.replaceFirst("^§.", ""));
+            if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(CLANS)) {
-            p.closeInventory();
-            msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
+            p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
+        } else if (title.equals(SHOP)) buy(p, name);
+    }
+
+    private void openTpaMenu(Player p) {
+        List<Player> targets = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p))
+                .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
+        if (isBedrock(p)) {
+            List<String> labels = targets.stream().map(Player::getName).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+            labels.add("Voltar");
+            openBedrockSelection(p, "TPA", "Escolha quem receberá seu pedido.", labels, index -> {
+                if (index >= 0 && index < targets.size()) sendTpa(p, targets.get(index)); else openMenu(p);
+            });
+            return;
         }
+        Inventory inv = Bukkit.createInventory(null, 54, TPA_MENU);
+        int slot = 0;
+        for (Player target : targets) { if (slot >= 45) break; inv.setItem(slot++, button(Material.PLAYER_HEAD, "§a" + target.getName())); }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void openHomeMenu(Player p) {
+        String path = "players." + id(p) + ".homes";
+        ConfigurationSection homes = getConfig().getConfigurationSection(path);
+        List<String> names = homes == null ? new ArrayList<>() : new ArrayList<>(homes.getKeys(false));
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        if (isBedrock(p)) {
+            List<String> labels = new ArrayList<>(); labels.add("Criar home (automática)"); labels.addAll(names); labels.add("Voltar");
+            openBedrockSelection(p, "HOMES", "Você tem " + names.size() + "/5 homes.", labels, index -> {
+                if (index == 0) { createNextHome(p); openHomeMenu(p); }
+                else if (index > 0 && index <= names.size()) teleportHome(p, names.get(index - 1));
+                else openMenu(p);
+            });
+            return;
+        }
+        Inventory inv = Bukkit.createInventory(null, 27, HOME_MENU);
+        inv.setItem(10, button(Material.EMERALD, "§a§lCRIAR HOME"));
+        int[] slots = {12,13,14,15,16};
+        for (int i=0; i<Math.min(names.size(), slots.length); i++) {
+            ItemStack item=button(Material.RED_BED, "§aHOME: "+names.get(i));
+            ItemMeta meta=item.getItemMeta(); meta.setLore(List.of("§7Clique: teleportar","§cShift + clique: apagar")); item.setItemMeta(meta);
+            inv.setItem(slots[i], item);
+        }
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void createNextHome(Player p) {
+        String path="players."+id(p)+".homes"; ConfigurationSection homes=getConfig().getConfigurationSection(path);
+        int count=homes==null?0:homes.getKeys(false).size();
+        if(count>=5){msg(p,"Você já tem 5 homes. Apague uma para criar outra.");return;}
+        int index=1; while(getConfig().contains(path+".home"+index)) index++;
+        getConfig().set(path+".home"+index,p.getLocation()); saveConfig(); msg(p,"Home home"+index+" criada!");
+    }
+
+    private void teleportHome(Player p,String home) {
+        Location loc=getConfig().getLocation("players."+id(p)+".homes."+home);
+        if(loc==null){msg(p,"Home não encontrada.");return;}
+        p.teleport(loc); msg(p,"Teleportado para "+home+"."); p.closeInventory();
+    }
+
+    private void openWarpMenu(Player p) {
+        ConfigurationSection section=getConfig().getConfigurationSection("warps");
+        List<String> names=section==null?new ArrayList<>():new ArrayList<>(section.getKeys(false)); names.sort(String.CASE_INSENSITIVE_ORDER);
+        if(isBedrock(p)) {
+            List<String> labels=new ArrayList<>(names); labels.add("Voltar");
+            openBedrockSelection(p,"WARPS","Escolha um destino.",labels,index->{if(index>=0&&index<names.size())teleportWarp(p,names.get(index));else openMenu(p);});
+            return;
+        }
+        Inventory inv=Bukkit.createInventory(null,54,WARP_MENU); int slot=0;
+        for(String name:names){if(slot>=45)break;inv.setItem(slot++,button(Material.ENDER_EYE,"§b"+name));}
+        inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
+    }
+
+    private void teleportWarp(Player p,String warp) {
+        Location loc=getConfig().getLocation("warps."+warp); if(loc==null){msg(p,"Warp não encontrada.");return;}
+        p.teleport(loc);msg(p,"Teleportado para "+warp+".");p.closeInventory();
+    }
+
+    private void openShop(Player p) {
+        if(isBedrock(p)){openBedrockSelection(p,"LOJA","Escolha uma categoria.",SHOP_CATEGORIES_LIST,index->{if(index>=0&&index<SHOP_CATEGORIES_LIST.size())openShopCategory(p,SHOP_CATEGORIES_LIST.get(index));});return;}
+        Inventory inv=Bukkit.createInventory(null,27,SHOP_CATEGORIES);
+        Material[] icons={Material.DIAMOND,Material.BRICKS,Material.WHEAT,Material.COOKED_BEEF,Material.CHEST,Material.ENDER_PEARL};
+        for(int i=0;i<SHOP_CATEGORIES_LIST.size();i++)inv.setItem(10+i,button(icons[i],"§e"+SHOP_CATEGORIES_LIST.get(i)));
+        inv.setItem(22,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
+    }
+
+    private void openShopCategory(Player p,String category) {
+        List<ShopProduct> products=SHOP_PRODUCTS.stream().filter(product->product.category().equals(category)).toList();
+        if(isBedrock(p)){
+            List<String> labels=new ArrayList<>();for(ShopProduct product:products)labels.add(product.name()+" - $"+product.price()+(product.limited()?" (limitado)":""));labels.add("Voltar");
+            openBedrockSelection(p,category,"Saldo: $"+money(p)+". Selecione um item.",labels,index->{if(index>=0&&index<products.size())buyProduct(p,products.get(index),1);else openShop(p);});return;
+        }
+        Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
+        for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
+            meta.setDisplayName("§f"+product.name());meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
+        inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
+    }
+
+    private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equals(name)).findFirst().orElse(null);}
+
+    private void buyProduct(Player p,ShopProduct product,int amount){
+        if(product.limited())amount=1;double total=product.price()*amount;
+        if(!Double.isFinite(total)||money(p)<total){msg(p,"Saldo insuficiente. Preço: $"+total);return;}
+        Map<Integer,ItemStack> leftovers=p.getInventory().addItem(new ItemStack(product.material(),amount));
+        if(!leftovers.isEmpty()){msg(p,"Espaço insuficiente no inventário.");return;}
+        money(p,money(p)-total);msg(p,"Compra realizada: "+amount+"x "+product.name()+" por $"+total+".");
+    }
+
+    private void sendTpa(Player p,Player target){
+        if(target==null||target.equals(p)||!target.isOnline()){msg(p,"Jogador inválido.");return;}
+        tpa.put(target.getUniqueId(),p.getUniqueId());tpaCreated.put(target.getUniqueId(),System.currentTimeMillis());
+        msg(p,"Pedido enviado para "+target.getName()+". Expira em 60 segundos.");
+        msg(target,p.getName()+" pediu teleporte. Use /tpaccept ou /tpdeny.");
     }
 
     private void openClanMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
         inv.setItem(13, button(Material.NAME_TAG, "§e§lCOMANDOS DE CLAN"));
         p.openInventory(inv);
-    }
-
-    private void openShop(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 27, SHOP);
-
-        inv.setItem(10, shopItem(Material.IRON_INGOT, "§fFerro", 20));
-        inv.setItem(11, shopItem(Material.GOLD_INGOT, "§6Ouro", 35));
-        inv.setItem(12, shopItem(Material.DIAMOND, "§bDiamante", 150));
-        inv.setItem(13, shopItem(Material.EMERALD, "§aEsmeralda", 100));
-        inv.setItem(14, shopItem(Material.OAK_LOG, "§6Madeira", 10));
-        inv.setItem(15, shopItem(Material.BREAD, "§ePão", 8));
-        inv.setItem(16, shopItem(Material.OBSIDIAN, "§5Obsidiana", 80));
-
-        p.openInventory(inv);
-    }
-
-    private ItemStack shopItem(Material material, String name, double price) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-
-        meta.setDisplayName(name);
-        meta.setLore(List.of(
-                "§7Preço: §a$" + price,
-                "§eClique para comprar"
-        ));
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private void buy(Player p, String name) {
-        Map<String, Object[]> items = new HashMap<>();
-
-        items.put("§fFerro", new Object[]{Material.IRON_INGOT, 20.0});
-        items.put("§6Ouro", new Object[]{Material.GOLD_INGOT, 35.0});
-        items.put("§bDiamante", new Object[]{Material.DIAMOND, 150.0});
-        items.put("§aEsmeralda", new Object[]{Material.EMERALD, 100.0});
-        items.put("§6Madeira", new Object[]{Material.OAK_LOG, 10.0});
-        items.put("§ePão", new Object[]{Material.BREAD, 8.0});
-        items.put("§5Obsidiana", new Object[]{Material.OBSIDIAN, 80.0});
-
-        Object[] data = items.get(name);
-        if (data == null) {
-            return;
-        }
-
-        Material material = (Material) data[0];
-        double price = (double) data[1];
-
-        if (money(p) < price) {
-            msg(p, "Você não tem dinheiro suficiente.");
-            return;
-        }
-
-        if (p.getInventory().firstEmpty() == -1) {
-            msg(p, "Seu inventário está cheio.");
-            return;
-        }
-
-        money(p, money(p) - price);
-        p.getInventory().addItem(new ItemStack(material));
-
-        msg(p, "Compra realizada!");
     }
 
     @Override
