@@ -315,7 +315,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
         String name = item.getItemMeta().getDisplayName();
-        if (name.equals(BACK_BUTTON)) { openMenu(p); return; }
+        if (name.equals(BACK_BUTTON)) { if (title.startsWith(SHOP_CATEGORY_PREFIX)) openShop(p); else openMenu(p); return; }
 
         if (title.equals(MENU)) {
             switch (name) {
@@ -349,6 +349,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(CLANS)) {
             p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
         } else if (title.equals(SHOP)) buy(p, name);
+    }
+
+    @EventHandler
+    public void menuDrag(InventoryDragEvent event) {
+        String title = event.getView().getTitle();
+        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS)
+                || title.equals(TPA_MENU) || title.equals(HOME_MENU) || title.equals(WARP_MENU)
+                || title.equals(SHOP_CATEGORIES) || title.startsWith(SHOP_CATEGORY_PREFIX)) {
+            event.setCancelled(true);
+        }
     }
 
     private void openTpaMenu(Player p) {
