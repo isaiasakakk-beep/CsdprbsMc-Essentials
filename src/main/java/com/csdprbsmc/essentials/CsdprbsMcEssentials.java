@@ -316,7 +316,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void interact(PlayerInteractEvent event) {
-        if (event.getAction() == Action.PHYSICAL) return;
+        if (event.getAction() == PlayerInteractEvent.Action.PHYSICAL) return;
         Player player = event.getPlayer();
         ItemStack used = event.getItem();
         boolean menuCompass = isCompass(used)
