@@ -22,6 +22,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
 
     private final Map<UUID, UUID> tpa = new HashMap<>();
+    private final Map<UUID, Long> tpaCreated = new HashMap<>();
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -160,6 +161,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 meta.getPersistentDataContainer().has(
                         compassKey, PersistentDataType.BYTE
                 );
+    }
+
+    @EventHandler
+    public void quit(PlayerQuitEvent event) {
+        UUID leaving = event.getPlayer().getUniqueId();
+        tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
+        tpaCreated.keySet().removeIf(target -> !tpa.containsKey(target));
     }
 
     @EventHandler
@@ -414,16 +422,23 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
 
                 tpa.put(target.getUniqueId(), p.getUniqueId());
+                tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
 
-                msg(p, "Pedido enviado para " + target.getName());
+                msg(p, "Pedido enviado para " + target.getName() + ". Expira em 60 segundos.");
                 msg(target, p.getName() + " pediu teleporte. Use /tpaccept ou /tpdeny.");
             }
 
             case "tpaccept" -> {
                 UUID requesterId = tpa.remove(p.getUniqueId());
+                Long created = tpaCreated.remove(p.getUniqueId());
 
-                if (requesterId == null) {
+                if (requesterId == null || created == null) {
                     msg(p, "Você não tem pedidos.");
+                    return true;
+                }
+
+                if (System.currentTimeMillis() - created > 60_000L) {
+                    msg(p, "Esse pedido de teleporte expirou.");
                     return true;
                 }
 
@@ -441,6 +456,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
             case "tpdeny" -> {
                 tpa.remove(p.getUniqueId());
+                tpaCreated.remove(p.getUniqueId());
                 msg(p, "Pedido recusado.");
             }
 
@@ -696,7 +712,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
-                String clan = args[1].toLowerCase();
+                String clan = args[1].toLowerCase(Locale.ROOT);
+                if (!clan.matches("[a-z0-9_]{3,16}")) {
+                    msg(p, "Nome inválido. Use 3 a 16 letras, números ou _.");
+                    return;
+                }
 
                 if (getConfig().contains("clans." + clan)) {
                     msg(p, "Esse clan já existe.");
@@ -731,7 +751,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
                 Player target = Bukkit.getPlayerExact(args[1]);
 
-                if (target == null ||
+                if (target == null || target.equals(p) ||
                         getConfig().getString(
                                 "players." + id(target) + ".clan"
                         ) != null) {
@@ -761,9 +781,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     msg(p, "Você não tem convites.");
                     return;
                 }
-                getConfig().set("clan-invites." + id(p), null);
 
-                if (clan == null || !getConfig().contains("clans." + clan)) {
+                if (!getConfig().contains("clans." + clan)) {
+                    getConfig().set("clan-invites." + id(p), null);
+                    saveConfig();
                     msg(p, "Esse clan não está mais disponível.");
                     return;
                 }
@@ -784,6 +805,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return;
                 }
 
+                getConfig().set("clan-invites." + id(p), null);
                 members.add(id(p));
 
                 getConfig().set("clans." + clan + ".members", members);
