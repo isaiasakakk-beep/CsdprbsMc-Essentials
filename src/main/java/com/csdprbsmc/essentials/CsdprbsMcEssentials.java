@@ -478,84 +478,96 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         return item;
     }
 
-    @EventHandler
+    private String plain(String value) {
+        return value == null ? "" : org.bukkit.ChatColor.stripColor(value);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void menuClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player p)) return;
-        String title = event.getView().getTitle();
-        if (!title.equals(MENU) && !title.equals(SHOP) && !title.equals(CLANS)
-                && !title.equals(TPA_MENU) && !title.equals(TPA_REQUEST_MENU)
-                && !title.equals(HOME_MENU) && !title.equals(HOME_ACTION_MENU)
-                && !title.equals(WARP_MENU) && !title.equals(SHOP_CATEGORIES)
-                && !title.startsWith(SHOP_CATEGORY_PREFIX)) return;
+        if (event.getClickedInventory() == null
+                || event.getClickedInventory() != event.getView().getTopInventory()) return;
+
+        String title = plain(event.getView().getTitle());
+        boolean managed = title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
+                || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
+                || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
+                || title.equals(plain(CLANS)) || title.equals(plain(SHOP))
+                || title.equals(plain(SHOP_CATEGORIES))
+                || title.startsWith(plain(SHOP_CATEGORY_PREFIX));
+        if (!managed) return;
+
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
-        if (item == null || !item.hasItemMeta()) return;
-        String name = item.getItemMeta().getDisplayName();
-        if (name.equals(BACK_BUTTON)) {
-            if (title.startsWith(SHOP_CATEGORY_PREFIX)) openShop(p);
-            else if (title.equals(HOME_ACTION_MENU)) openHomeMenu(p);
-            else if (title.equals(TPA_REQUEST_MENU)) openTpaMenu(p);
+        if (item == null || !item.hasItemMeta() || !item.getItemMeta().hasDisplayName()) return;
+        String name = plain(item.getItemMeta().getDisplayName());
+
+        if (name.equals(plain(BACK_BUTTON))) {
+            if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
+            else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
+            else if (title.equals(plain(TPA_REQUEST_MENU))) openTpaMenu(p);
             else openMenu(p);
             return;
         }
 
-        if (title.equals(MENU)) {
+        if (title.equals(plain(MENU))) {
             switch (name) {
-                case "§f§6§lTPA§f" -> openTpaMenu(p);
-                case "§f§e§lHOME§f" -> openHomeMenu(p);
-                case "§f§6§lWARPS§f" -> openWarpMenu(p);
-                case "§f§e§lCLANS§f" -> openClanMenu(p);
-                case "§f§6§lRANKINGS§f" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
-                case "§f§e§lLOJA/ECONOMIA§f" -> openShop(p);
+                case "TPA" -> openTpaMenu(p);
+                case "HOME" -> openHomeMenu(p);
+                case "WARPS" -> openWarpMenu(p);
+                case "CLANS" -> openClanMenu(p);
+                case "RANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
+                case "LOJA/ECONOMIA" -> openShop(p);
+                default -> { }
             }
-        } else if (title.equals(TPA_MENU) && name.startsWith("§a")) {
-            Player target = Bukkit.getPlayerExact(name.substring(2));
-            if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
-            sendTpa(p, target); p.closeInventory();
-        } else if (title.equals(TPA_MENU) && name.equals("§e§lPEDIDOS RECEBIDOS")) {
-            openTpaRequests(p);
-        } else if (title.equals(TPA_MENU) && name.equals("§e§lMEUS PEDIDOS")) {
-            cancelOutgoingTpa(p); openTpaMenu(p);
-        } else if (title.equals(TPA_REQUEST_MENU)) {
-            if (name.equals("§a§lACEITAR PEDIDO")) respondTpa(p, true);
-            else if (name.equals("§c§lRECUSAR PEDIDO")) respondTpa(p, false);
-            else if (name.equals(BACK_BUTTON)) openTpaMenu(p);
-        } else if (title.equals(HOME_MENU)) {
-            if (name.equals("§a§lCRIAR HOME")) { createNextHome(p); openHomeMenu(p); }
-            else if (name.startsWith("§aHOME: ")) openHomeActions(p, name.substring("§aHOME: ".length()));
-        } else if (title.equals(HOME_ACTION_MENU)) {
+        } else if (title.equals(plain(TPA_MENU))) {
+            if (name.equals("PEDIDOS RECEBIDOS")) openTpaRequests(p);
+            else if (name.equals("MEUS PEDIDOS")) { cancelOutgoingTpa(p); openTpaMenu(p); }
+            else {
+                Player target = Bukkit.getPlayerExact(name);
+                if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
+                sendTpa(p, target);
+                p.closeInventory();
+            }
+        } else if (title.equals(plain(TPA_REQUEST_MENU))) {
+            if (name.equals("ACEITAR PEDIDO")) respondTpa(p, true);
+            else if (name.equals("RECUSAR PEDIDO")) respondTpa(p, false);
+        } else if (title.equals(plain(HOME_MENU))) {
+            if (name.equals("CRIAR HOME")) { createNextHome(p); openHomeMenu(p); }
+            else if (name.startsWith("HOME: ")) openHomeActions(p, name.substring("HOME: ".length()));
+        } else if (title.equals(plain(HOME_ACTION_MENU))) {
             String home = selectedHomes.get(p.getUniqueId());
             if (home == null) { openHomeMenu(p); return; }
-            if (name.equals("§a§lTELEPORTAR")) teleportHome(p, home);
-            else if (name.equals("§e§lEDITAR LOCAL")) {
+            if (name.equals("TELEPORTAR")) teleportHome(p, home);
+            else if (name.equals("EDITAR LOCAL")) {
                 getConfig().set("players." + id(p) + ".homes." + home, p.getLocation());
                 saveConfig(); msg(p, "Local da home " + home + " atualizado."); openHomeMenu(p);
-            } else if (name.equals("§c§lAPAGAR HOME")) {
+            } else if (name.equals("APAGAR HOME")) {
                 deleteHome(p, home); selectedHomes.remove(p.getUniqueId()); openHomeMenu(p);
-            } else if (name.equals(BACK_BUTTON)) openHomeMenu(p);
-        } else if (title.equals(WARP_MENU) && name.startsWith("§b")) {
-            teleportWarp(p, name.substring(2));
-        } else if (title.equals(SHOP_CATEGORIES) && name.startsWith("§e")) {
-            openShopCategory(p, name.substring(2));
-        } else if (title.startsWith(SHOP_CATEGORY_PREFIX)) {
-            if (name.equals(SHOP_SELL_HAND)) sellHand(p);
-            else if (name.equals(SHOP_SELL_ALL)) sellAll(p);
+            }
+        } else if (title.equals(plain(WARP_MENU))) {
+            teleportWarp(p, name);
+        } else if (title.equals(plain(SHOP_CATEGORIES))) {
+            openShopCategory(p, name);
+        } else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) {
+            if (name.equals(plain(SHOP_SELL_HAND))) sellHand(p);
+            else if (name.equals(plain(SHOP_SELL_ALL))) sellAll(p);
             else {
-                ShopProduct product = findProduct(name.replace("§f§l", "").replace("§f", "").replace("§r", ""));
+                ShopProduct product = findProduct(name);
                 if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
             }
-        } else if (title.equals(CLANS)) {
+        } else if (title.equals(plain(CLANS))) {
             p.closeInventory();
-            if (name.equals("§e§lCRIAR CLAN")) {
+            if (name.equals("CRIAR CLAN")) {
                 pendingClanInput.put(p.getUniqueId(), "criar");
                 msg(p, "Digite no chat o nome do novo clan.");
-            } else if (name.equals("§a§lCONVIDAR JOGADOR")) {
+            } else if (name.equals("CONVIDAR JOGADOR")) {
                 pendingClanInput.put(p.getUniqueId(), "convidar");
                 msg(p, "Digite no chat o nome do jogador que deseja convidar.");
-            } else if (name.equals("§a§lACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
-            else if (name.equals("§e§lINFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
-            else if (name.equals("§c§lSAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
-        } else if (title.equals(SHOP)) buy(p, name);
+            } else if (name.equals("ACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
+            else if (name.equals("INFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
+            else if (name.equals("SAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
+        }
     }
 
     @EventHandler
