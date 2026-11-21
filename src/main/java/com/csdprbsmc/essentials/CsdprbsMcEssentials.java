@@ -384,11 +384,17 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         List<String> names = homes == null ? new ArrayList<>() : new ArrayList<>(homes.getKeys(false));
         names.sort(String.CASE_INSENSITIVE_ORDER);
         if (isBedrock(p)) {
-            List<String> labels = new ArrayList<>(); labels.add("Criar home (automática)"); labels.addAll(names); labels.add("Voltar");
+            List<String> labels = new ArrayList<>();
+            labels.add("Criar home (automática)");
+            for (String home : names) { labels.add("Ir para: " + home); labels.add("Apagar: " + home); }
+            labels.add("Voltar");
             openBedrockSelection(p, "HOMES", "Você tem " + names.size() + "/5 homes.", labels, index -> {
                 if (index == 0) { createNextHome(p); openHomeMenu(p); }
-                else if (index > 0 && index <= names.size()) teleportHome(p, names.get(index - 1));
-                else openMenu(p);
+                else if (index > 0 && index <= names.size() * 2) {
+                    String home = names.get((index - 1) / 2);
+                    if ((index - 1) % 2 == 0) teleportHome(p, home);
+                    else { deleteHome(p, home); openHomeMenu(p); }
+                } else openMenu(p);
             });
             return;
         }
@@ -409,6 +415,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if(count>=5){msg(p,"Você já tem 5 homes. Apague uma para criar outra.");return;}
         int index=1; while(getConfig().contains(path+".home"+index)) index++;
         getConfig().set(path+".home"+index,p.getLocation()); saveConfig(); msg(p,"Home home"+index+" criada!");
+    }
+
+    private void deleteHome(Player p, String home) {
+        String path = "players." + id(p) + ".homes." + home;
+        if (!getConfig().contains(path)) { msg(p, "Home não encontrada."); return; }
+        getConfig().set(path, null); saveConfig(); msg(p, "Home " + home + " apagada.");
     }
 
     private void teleportHome(Player p,String home) {
@@ -436,7 +448,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openShop(Player p) {
-        if(isBedrock(p)){openBedrockSelection(p,"LOJA","Escolha uma categoria.",SHOP_CATEGORIES_LIST,index->{if(index>=0&&index<SHOP_CATEGORIES_LIST.size())openShopCategory(p,SHOP_CATEGORIES_LIST.get(index));});return;}
+        if(isBedrock(p)){List<String> labels=new ArrayList<>(SHOP_CATEGORIES_LIST);labels.add("Voltar");openBedrockSelection(p,"LOJA","Escolha uma categoria.",labels,index->{if(index>=0&&index<SHOP_CATEGORIES_LIST.size())openShopCategory(p,SHOP_CATEGORIES_LIST.get(index));else openMenu(p);});return;}
         Inventory inv=Bukkit.createInventory(null,27,SHOP_CATEGORIES);
         Material[] icons={Material.DIAMOND,Material.BRICKS,Material.WHEAT,Material.COOKED_BEEF,Material.CHEST,Material.ENDER_PEARL};
         for(int i=0;i<SHOP_CATEGORIES_LIST.size();i++)inv.setItem(10+i,button(icons[i],"§e"+SHOP_CATEGORIES_LIST.get(i)));
