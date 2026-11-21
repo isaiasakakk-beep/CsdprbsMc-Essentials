@@ -1,5 +1,5 @@
 name: CsdprbsMcEssentials
-version: 1.2.0
+version: 1.3.0
 main: com.csdprbsmc.essentials.CsdprbsMcEssentials
 api-version: '26.3'
 author: CsdprbsMc
@@ -21,6 +21,7 @@ commands:
   bal:
   pay:
   shop:
+  missions:
   topmoney:
   topkills:
   setmoney:
