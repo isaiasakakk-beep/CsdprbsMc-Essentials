@@ -1,1 +1,6 @@
-
+name: CsdprbsMcEssentials
+version: 1.0.0
+main: com.csdprbsmc.essentials.CsdprbsMcEssentials
+api-version: '26.3'
+author: CsdprbsMc
+description: Essentials para servidores semi-anarquia
