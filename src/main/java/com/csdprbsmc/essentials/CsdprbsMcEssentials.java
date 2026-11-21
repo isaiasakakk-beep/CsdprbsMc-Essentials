@@ -269,10 +269,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         ItemMeta meta = item.getItemMeta();
 
-        return meta != null &&
-                meta.getPersistentDataContainer().has(
-                        compassKey, PersistentDataType.BYTE
-                );
+        if (meta == null) return false;
+        // Geyser pode não preservar o PDC no caminho de interação Bedrock;
+        // o nome exclusivo da bússola funciona como identificação secundária.
+        return meta.getPersistentDataContainer().has(compassKey, PersistentDataType.BYTE)
+                || (meta.hasDisplayName()
+                    && org.bukkit.ChatColor.stripColor(meta.getDisplayName())
+                            .equalsIgnoreCase("CSDPRBSMC MENU"));
     }
 
     @EventHandler
@@ -313,11 +316,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void interact(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) return;
-        if (isCompass(event.getItem())) {
-            event.setCancelled(true);
-            openMenu(event.getPlayer());
-        }
+        if (event.getAction() == Action.PHYSICAL) return;
+        Player player = event.getPlayer();
+        ItemStack used = event.getItem();
+        boolean menuCompass = isCompass(used)
+                || isCompass(player.getInventory().getItemInMainHand())
+                || isCompass(player.getInventory().getItemInOffHand());
+        if (!menuCompass) return;
+        event.setCancelled(true);
+        if (event.getHand() == EquipmentSlot.OFF_HAND) return;
+        openMenu(player);
     }
 
     @EventHandler
@@ -367,12 +375,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private String memberTag() {
-        return "§f『§e§lM§0§lE§e§lM§0§lB§e§lR§0§lO§f』";
+        return "§e§lM§6§lE§e§lM§6§lB§e§lR§6§lO";
     }
 
     private String playerTag(Player player) {
         String clan = getConfig().getString("players." + id(player) + ".clan");
-        String clanTag = clan == null ? "" : " §f『§e§l" + clan.toUpperCase(Locale.ROOT) + "§f』";
+        String clanTag = clan == null ? "" : " §f§e§l" + clan.toUpperCase(Locale.ROOT) + "§f";
         return memberTag() + clanTag;
     }
 
@@ -406,12 +414,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         Inventory inv = Bukkit.createInventory(null, 27, MENU);
 
-        inv.setItem(10, button(Material.ENDER_PEARL, "§f『§0§lTPA§f』"));
-        inv.setItem(11, button(Material.RED_BED, "§f『§e§lHOME§f』"));
-        inv.setItem(12, button(Material.ENDER_EYE, "§f『§0§lWARPS§f』"));
-        inv.setItem(13, button(Material.NAME_TAG, "§f『§e§lCLANS§f』"));
-        inv.setItem(14, button(Material.GOLD_INGOT, "§f『§0§lRANKINGS§f』"));
-        inv.setItem(15, button(Material.EMERALD, "§f『§e§lLOJA/ECONOMIA§f』"));
+        inv.setItem(10, button(Material.ENDER_PEARL, "§f§6§lTPA§f"));
+        inv.setItem(11, button(Material.RED_BED, "§f§e§lHOME§f"));
+        inv.setItem(12, button(Material.ENDER_EYE, "§f§6§lWARPS§f"));
+        inv.setItem(13, button(Material.NAME_TAG, "§f§e§lCLANS§f"));
+        inv.setItem(14, button(Material.GOLD_INGOT, "§f§6§lRANKINGS§f"));
+        inv.setItem(15, button(Material.EMERALD, "§f§e§lLOJA/ECONOMIA§f"));
 
         p.openInventory(inv);
     }
@@ -439,12 +447,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         if (title.equals(MENU)) {
             switch (name) {
-                case "§f『§0§lTPA§f』" -> openTpaMenu(p);
-                case "§f『§e§lHOME§f』" -> openHomeMenu(p);
-                case "§f『§0§lWARPS§f』" -> openWarpMenu(p);
-                case "§f『§e§lCLANS§f』" -> openClanMenu(p);
-                case "§f『§0§lRANKINGS§f』" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
-                case "§f『§e§lLOJA/ECONOMIA§f』" -> openShop(p);
+                case "§f§6§lTPA§f" -> openTpaMenu(p);
+                case "§f§e§lHOME§f" -> openHomeMenu(p);
+                case "§f§6§lWARPS§f" -> openWarpMenu(p);
+                case "§f§e§lCLANS§f" -> openClanMenu(p);
+                case "§f§6§lRANKINGS§f" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
+                case "§f§e§lLOJA/ECONOMIA§f" -> openShop(p);
             }
         } else if (title.equals(TPA_MENU) && name.startsWith("§a")) {
             Player target = Bukkit.getPlayerExact(name.substring(2));
@@ -464,7 +472,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(SHOP_CATEGORIES) && name.startsWith("§e")) {
             openShopCategory(p, name.substring(2));
         } else if (title.startsWith(SHOP_CATEGORY_PREFIX)) {
-            ShopProduct product = findProduct(name.replace("§f『§l", "").replace("§f』", "").replace("§r", ""));
+            ShopProduct product = findProduct(name.replace("§f§l", "").replace("§f", "").replace("§r", ""));
             if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(CLANS)) {
             p.closeInventory(); msg(p, "Use §e/clan ajuda §fpara ver os comandos.");
@@ -583,7 +591,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
         for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
-            meta.setDisplayName("§f『§l"+product.name()+"§f』");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
+            meta.setDisplayName("§f§l"+product.name()+"§f");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
         inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
     }
 
