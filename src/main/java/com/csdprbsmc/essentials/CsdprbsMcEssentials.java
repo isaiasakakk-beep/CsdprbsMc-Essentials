@@ -55,6 +55,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String CLAN_REQUESTS_MENU = "§8§lSOLICITAÇÕES DE CLAN";
     private static final String CLAN_INVITES_MENU = "§8§lCONVITES DE CLAN";
     private static final String BOUNTY_MENU = "§8§lJOGADORES PROCURADOS";
+    private static final String BOUNTY_TARGET_MENU = "§8§lESCOLHA O ALVO";
     private static final String CONTRACT_MENU = "§8§lCONTRATOS";
     private static final String TREASURE_MENU = "§8§lTESOUROS";
     private Location activeTreasure;
@@ -234,7 +235,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Bukkit.getPluginManager().registerEvents(this, this);
 
         String[] commands = {
-                "ess", "tpa", "tpahere", "tpaccept", "tpdeny",
+                "ess", "tpa", "tpahere", "tpaccept", "tpdeny", "procurados", "contratos", "tesouro",
                 "sethome", "home", "delhome",
                 "setwarp", "warp", "delwarp",
                 "clan", "bal", "pay", "shop",
@@ -248,7 +249,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         }
 
-        getLogger().info("CsdprbsMc Essentials iniciado!");
+        getServer().getScheduler().runTaskTimer(this, this::spawnTreasure, 20L * 60 * 30, 20L * 60 * 30);
+        getLogger().info("CsdprbsMc Essentials iniciado! Loja carregada com " + SHOP_PRODUCTS.size() + " itens.");
     }
 
     @Override
@@ -475,6 +477,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             msg(killer, "Você ganhou §a$10 §fe uma kill!");
         }
 
+        if (killer != null && !killer.equals(victim)) {
+            String bountyPath = "bounties." + victim.getUniqueId();
+            double bounty = getConfig().getDouble(bountyPath + ".reward", 0);
+            if (bounty > 0) {
+                addMoney(killer, bounty);
+                getConfig().set(bountyPath, null); saveConfig();
+                msg(killer, "§6Você recebeu $" + bounty + " pela recompensa de " + victim.getName() + "!");
+                msg(victim, "Sua recompensa foi reclamada por " + killer.getName() + ".");
+            }
+        }
         event.getDrops().removeIf(this::isCompass);
     }
 
@@ -551,6 +563,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void formatChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
+        String bountyTarget = pendingBountyTarget.remove(source.getUniqueId());
+        if (bountyTarget != null) {
+            String amountText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            event.setCancelled(true);
+            Bukkit.getScheduler().runTask(this, () -> setBountyFromChat(source, bountyTarget, amountText));
+            return;
+        }
         String pending = pendingClanInput.remove(source.getUniqueId());
         if (pending != null) {
             String input = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
@@ -569,7 +588,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 27, MENU);
+        Inventory inv = Bukkit.createInventory(null, 36, MENU);
 
         inv.setItem(10, button(Material.ENDER_PEARL, "§f§6§lTPA§f"));
         inv.setItem(11, button(Material.RED_BED, "§f§e§lHOME§f"));
@@ -578,6 +597,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(14, button(Material.GOLD_INGOT, "§f§6§lRANKINGS§f"));
         inv.setItem(15, button(Material.EMERALD, "§f§e§lLOJA/ECONOMIA§f"));
         inv.setItem(16, button(Material.WRITABLE_BOOK, "§f§6§lMISSÕES§f"));
+        inv.setItem(19, button(Material.IRON_SWORD, "§f§e§lPROCURADOS§f"));
+        inv.setItem(20, button(Material.FILLED_MAP, "§f§6§lCONTRATOS§f"));
+        inv.setItem(21, button(Material.CHEST, "§f§e§lTESOUROS§f"));
 
         p.openInventory(inv);
     }
@@ -627,7 +649,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
                 || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))
-                || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
+                || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(BOUNTY_TARGET_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
                 || title.equals(plain(SHOP_CATEGORIES))
                 || title.startsWith(plain(SHOP_CATEGORY_PREFIX));
         if (!managed) return;
@@ -656,6 +678,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "RANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
                 case "LOJA/ECONOMIA" -> openShop(p);
                 case "MISSÕES" -> openMissions(p);
+                case "PROCURADOS" -> openBountyMenu(p);
+                case "CONTRATOS" -> openContractMenu(p);
+                case "TESOUROS" -> openTreasureMenu(p);
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
@@ -744,6 +769,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
         } else if (title.equals(plain(CLAN_INVITES_MENU))) {
             if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else clanCommand(p, new String[]{"aceitar"}); }
+        } else if (title.equals(plain(BOUNTY_MENU))) {
+            if (name.equals("CRIAR RECOMPENSA")) openBountyTargetMenu(p);
+        } else if (title.equals(plain(BOUNTY_TARGET_MENU))) {
+            if (name.startsWith("ALVO: ")) { Player target = Bukkit.getPlayerExact(name.substring(6)); if (target != null && !target.equals(p)) { pendingBountyTarget.put(p.getUniqueId(), target.getUniqueId().toString()); p.closeInventory(); msg(p, "Digite no chat o valor da recompensa (mínimo $100)."); } }
+        } else if (title.equals(plain(CONTRACT_MENU))) {
+            if (name.startsWith("CONTRATO: ")) claimContract(p, name.substring(10));
+        } else if (title.equals(plain(TREASURE_MENU))) {
+            if (name.equals("ATUALIZAR")) openTreasureMenu(p);
         } else if (title.equals(plain(CLANS))) {
             p.closeInventory();
             if (name.equals("CRIAR CLAN")) {
@@ -768,7 +801,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1446,6 +1479,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
             case "shop" -> openShop(p);
 
+            case "procurados" -> openBountyMenu(p);
+
+            case "contratos" -> openContractMenu(p);
+
+            case "tesouro" -> openTreasureMenu(p);
+
             case "missions" -> openMissions(p);
 
             case "topmoney" -> showTop(p, "money");
@@ -1530,7 +1569,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void missionBlockBreak(BlockBreakEvent event) {
         Player p = event.getPlayer();
         Material type = event.getBlock().getType();
-        if (type == Material.STONE) addMissionProgress(p, "stone", 1);
+        if (type == Material.STONE) { addMissionProgress(p, "stone", 1); addContractProgress(p, "stone", 1); }
         if ((type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE)) addMissionProgress(p, "diamonds", 1);
         if (type == Material.ANCIENT_DEBRIS) addMissionProgress(p, "debris", 1);
         if (type == Material.OBSIDIAN) addMissionProgress(p, "obsidian", 1);
@@ -1543,7 +1582,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Player killer = event.getEntity().getKiller();
         if (killer == null) return;
         switch (event.getEntityType()) {
-            case ZOMBIE -> addMissionProgress(killer, "zombies", 1);
+            case ZOMBIE -> { addMissionProgress(killer, "zombies", 1); addContractProgress(killer, "zombies", 1); }
             case SKELETON -> addMissionProgress(killer, "skeletons", 1);
             case CREEPER -> addMissionProgress(killer, "creepers", 1);
             case ENDERMAN -> addMissionProgress(killer, "endermen", 1);
@@ -1557,6 +1596,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void missionFishing(PlayerFishEvent event) {
         if (event.getState() == PlayerFishEvent.State.CAUGHT_FISH) {
             addMissionProgress(event.getPlayer(), "fish", 1);
+            addContractProgress(event.getPlayer(), "fish", 1);
         }
     }
 
@@ -1631,6 +1671,144 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             msg(p, "§6#" + (i + 1) + " §f" +
                     entry.getKey() + " : " + entry.getValue());
         }
+    }
+
+    private record DailyContract(String id, String title, Material icon, int target, double reward, String description) {}
+
+    private List<DailyContract> dailyContracts() {
+        return List.of(new DailyContract("stone", "Minerador diário", Material.STONE, 64, 250, "Quebre 64 blocos de pedra"),
+                new DailyContract("zombies", "Caçador diário", Material.IRON_SWORD, 10, 350, "Derrote 10 zumbis"),
+                new DailyContract("fish", "Pescador diário", Material.FISHING_ROD, 5, 200, "Pesque 5 peixes"));
+    }
+
+    private void ensureDailyContracts(Player p) {
+        String base = "players." + id(p) + ".daily-contracts";
+        String today = LocalDate.now().toString();
+        if (!today.equals(getConfig().getString(base + ".date"))) {
+            getConfig().set(base + ".date", today);
+            for (DailyContract contract : dailyContracts()) { getConfig().set(base + "." + contract.id() + ".progress", 0); getConfig().set(base + "." + contract.id() + ".claimed", false); }
+            saveConfig();
+        }
+    }
+
+    private void addContractProgress(Player p, String contractId, int amount) {
+        ensureDailyContracts(p);
+        String path = "players." + id(p) + ".daily-contracts." + contractId;
+        if (getConfig().getBoolean(path + ".claimed")) return;
+        DailyContract contract = dailyContracts().stream().filter(c -> c.id().equals(contractId)).findFirst().orElse(null);
+        if (contract == null) return;
+        getConfig().set(path + ".progress", Math.min(contract.target(), getConfig().getInt(path + ".progress") + amount));
+        saveConfig();
+    }
+
+    private void openContractMenu(Player p) {
+        ensureDailyContracts(p);
+        Inventory inv = Bukkit.createInventory(null, 27, CONTRACT_MENU);
+        int[] slots = {10, 13, 16};
+        List<DailyContract> contracts = dailyContracts();
+        for (int i = 0; i < contracts.size(); i++) {
+            DailyContract c = contracts.get(i); String path = "players." + id(p) + ".daily-contracts." + c.id();
+            int progress = getConfig().getInt(path + ".progress"); boolean claimed = getConfig().getBoolean(path + ".claimed");
+            ItemStack item = button(c.icon(), (claimed ? "§a§lCONCLUÍDO: " : "§e§lCONTRATO: ") + c.id());
+            ItemMeta meta = item.getItemMeta(); meta.setLore(List.of("§7" + c.description(), "§7Progresso: §f" + progress + "/" + c.target(), "§7Recompensa: §a$" + c.reward(), claimed ? "§aJá resgatado" : progress >= c.target() ? "§eClique para receber" : "§cEm andamento")); item.setItemMeta(meta);
+            inv.setItem(slots[i], item);
+        }
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void claimContract(Player p, String contractId) {
+        ensureDailyContracts(p);
+        DailyContract c = dailyContracts().stream().filter(x -> x.id().equals(contractId)).findFirst().orElse(null);
+        if (c == null) return;
+        String path = "players." + id(p) + ".daily-contracts." + contractId;
+        if (getConfig().getBoolean(path + ".claimed") || getConfig().getInt(path + ".progress") < c.target()) { msg(p, "Esse contrato ainda não pode ser resgatado."); openContractMenu(p); return; }
+        getConfig().set(path + ".claimed", true); addMoney(p, c.reward()); saveConfig(); msg(p, "Contrato concluído! Você recebeu $" + c.reward() + "."); openContractMenu(p);
+    }
+
+    private void openBountyMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, BOUNTY_MENU);
+        ConfigurationSection section = getConfig().getConfigurationSection("bounties");
+        List<String> targets = section == null ? new ArrayList<>() : new ArrayList<>(section.getKeys(false));
+        targets.sort(Comparator.comparingDouble((String uuid) -> getConfig().getDouble("bounties." + uuid + ".reward")).reversed());
+        int slot = 0;
+        for (String uuid : targets) {
+            if (slot >= 45) break;
+            try {
+                ItemStack head = offlineHead(UUID.fromString(uuid), "§c" + getConfig().getString("bounties." + uuid + ".name", "Desconhecido"));
+                ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§7Recompensa: §a$" + getConfig().getDouble("bounties." + uuid + ".reward"))); head.setItemMeta(meta); inv.setItem(slot++, head);
+            } catch (Exception ignored) { }
+        }
+        inv.setItem(49, button(Material.GOLD_INGOT, "§e§lCRIAR RECOMPENSA"));
+        inv.setItem(53, button(Material.BARRIER, BACK_BUTTON));
+        if (slot == 0) msg(p, "Ainda não existem jogadores procurados.");
+        p.openInventory(inv);
+    }
+
+    private void openBountyTargetMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, BOUNTY_TARGET_MENU);
+        int slot = 0;
+        for (Player target : Bukkit.getOnlinePlayers().stream().filter(x -> !x.equals(p)).sorted(Comparator.comparing(Player::getName)).toList()) {
+            if (slot >= 45) break;
+            inv.setItem(slot++, playerHead(target, "§eALVO: " + target.getName()));
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void setBountyFromChat(Player p, String targetId, String amountText) {
+        Player target;
+        try { target = Bukkit.getPlayer(UUID.fromString(targetId)); } catch (Exception ex) { msg(p, "Alvo inválido."); return; }
+        if (target == null || target.equals(p)) { msg(p, "O alvo não está mais disponível."); return; }
+        try {
+            double amount = Double.parseDouble(amountText.replace(",", "."));
+            if (!Double.isFinite(amount) || amount < 100 || amount > money(p)) { msg(p, "Valor inválido. O mínimo é $100 e você precisa ter esse saldo."); return; }
+            money(p, money(p) - amount);
+            String path = "bounties." + targetId;
+            getConfig().set(path + ".name", target.getName()); getConfig().set(path + ".reward", getConfig().getDouble(path + ".reward") + amount);
+            saveConfig(); msg(p, "Recompensa adicionada! Agora há $" + getConfig().getDouble(path + ".reward") + " pela cabeça de " + target.getName() + ".");
+            msg(target, "§cVocê agora está PROCURADO! Recompensa atual: $" + getConfig().getDouble(path + ".reward") + ".");
+        } catch (NumberFormatException ex) { msg(p, "Digite apenas um valor numérico, como 500."); }
+    }
+
+    private void openTreasureMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, TREASURE_MENU);
+        inv.setItem(13, button(activeTreasure == null ? Material.BARRIER : Material.CHEST, activeTreasure == null ? "§cNenhum tesouro ativo" : "§a§lTESOURO ESCONDIDO ATIVO"));
+        inv.setItem(15, button(Material.PAPER, "§e§lATUALIZAR"));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void spawnTreasure() {
+        if (activeTreasure != null) return;
+        List<World> worlds = Bukkit.getWorlds(); if (worlds.isEmpty()) return;
+        World world = worlds.get(0); Chunk[] chunks = world.getLoadedChunks(); if (chunks.length == 0) return;
+        Chunk chunk = chunks[ThreadLocalRandom.current().nextInt(chunks.length)];
+        int x = (chunk.getX() << 4) + ThreadLocalRandom.current().nextInt(16);
+        int z = (chunk.getZ() << 4) + ThreadLocalRandom.current().nextInt(16);
+        int y = Math.min(world.getMaxHeight() - 1, world.getHighestBlockYAt(x, z) + 1);
+        org.bukkit.block.Block block = world.getBlockAt(x, y, z);
+        if (!block.getType().isAir()) return;
+        block.setType(Material.CHEST); activeTreasure = block.getLocation();
+        org.bukkit.block.Chest chest = (org.bukkit.block.Chest) block.getState();
+        chest.getBlockInventory().addItem(new ItemStack(Material.DIAMOND, 1 + ThreadLocalRandom.current().nextInt(3)),
+                new ItemStack(Material.GOLD_INGOT, 8 + ThreadLocalRandom.current().nextInt(17)),
+                new ItemStack(Material.EMERALD, 2 + ThreadLocalRandom.current().nextInt(5)));
+        chest.update(); Bukkit.broadcastMessage("§6§l[CSDPRBS] §eUm tesouro misterioso apareceu em algum lugar do mundo! Encontre-o antes que desapareça.");
+        Location treasure = activeTreasure;
+        Bukkit.getScheduler().runTaskLater(this, () -> { if (activeTreasure != null && activeTreasure.equals(treasure)) { treasure.getBlock().setType(Material.AIR); activeTreasure = null; Bukkit.broadcastMessage("§7O tesouro misterioso desapareceu."); } }, 20L * 60 * 10);
+    }
+
+    @EventHandler
+    public void treasureOpen(org.bukkit.event.inventory.InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player) || activeTreasure == null) return;
+        if (!(event.getInventory().getHolder() instanceof org.bukkit.block.Chest chest) || !chest.getLocation().equals(activeTreasure)) return;
+        event.setCancelled(true);
+        for (ItemStack loot : event.getInventory().getContents()) if (loot != null && !loot.getType().isAir()) {
+            Map<Integer, ItemStack> leftovers = player.getInventory().addItem(loot.clone());
+            leftovers.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
+        }
+        double reward = 250 + ThreadLocalRandom.current().nextInt(751); addMoney(player, reward);
+        activeTreasure.getBlock().setType(Material.AIR); activeTreasure = null;
+        msg(player, "§aVocê encontrou o tesouro e recebeu $" + reward + " mais os itens do baú!");
+        Bukkit.broadcastMessage("§6" + player.getName() + " encontrou o tesouro misterioso!");
     }
 
     private void clanCommand(Player p, String[] args) {
