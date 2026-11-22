@@ -21,6 +21,8 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -312,7 +314,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
     }
 
-    private void handleBedrockChoice(Player p, int choice) {
+    private void handleMainMenuChoice(Player p, int choice) {
         switch (choice) {
             case 0 -> openTpaMenu(p);
             case 1 -> openHomeMenu(p);
@@ -320,8 +322,35 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             case 3 -> openClanMenu(p);
             case 4 -> { showTop(p, "kills"); showTop(p, "money"); }
             case 5 -> openShop(p);
+            case 6 -> openMissions(p);
+            case 7 -> openBountyMenu(p);
+            case 8 -> openContractMenu(p);
+            case 9 -> openTreasureMenu(p);
+            case 10 -> teleportBack(p);
             default -> { }
         }
+    }
+
+    private boolean isBedrock(Player p) {
+        Object result = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
+        return Boolean.TRUE.equals(result);
+    }
+
+    private void openMainForm(Player p) {
+        List<String> choices = List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA / ECONOMIA", "MISSÕES", "PROCURADOS", "CONTRATOS", "TESOUROS", "BACK - LOCAL DA MORTE");
+        if (isBedrock(p)) {
+            openBedrockSelection(p, "CSDPRBSMC ESSENTIALS", "Escolha uma opção:", choices, choice -> handleMainMenuChoice(p, choice));
+            return;
+        }
+        p.sendMessage(Component.text("━━━━━━━━ CSDPRBSMC ESSENTIALS ━━━━━━━━").color(net.kyori.adventure.text.format.NamedTextColor.GOLD));
+        for (int i = 0; i < choices.size(); i++) {
+            final int option = i;
+            Component button = Component.text("  [" + (i + 1) + "] " + choices.get(i))
+                    .color(i % 2 == 0 ? net.kyori.adventure.text.format.NamedTextColor.BLACK : net.kyori.adventure.text.format.NamedTextColor.GOLD)
+                    .clickEvent(ClickEvent.runCommand("/ess menu " + option));
+            p.sendMessage(button);
+        }
+        p.sendMessage(Component.text("Clique em uma opção para abrir o menu.").color(net.kyori.adventure.text.format.NamedTextColor.GRAY));
     }
 
     private void openBedrockSelection(Player p, String title, String content, List<String> labels, Consumer<Integer> callback) {
@@ -610,6 +639,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
+        openMainForm(p);
+    }
+
+    private void openInventoryMainMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 36, MENU);
 
         inv.setItem(10, button(Material.ENDER_PEARL, "§f§6§lTPA§f"));
@@ -1301,7 +1334,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String cmd = command.getName().toLowerCase();
 
         switch (cmd) {
-            case "ess" -> openMenu(p);
+            case "ess" -> {
+                if (args.length == 2 && args[0].equalsIgnoreCase("menu")) {
+                    try { handleMainMenuChoice(p, Integer.parseInt(args[1])); }
+                    catch (NumberFormatException ex) { msg(p, "Opção inválida."); }
+                } else openMenu(p);
+            }
 
             case "bal" -> msg(p, "Seu saldo: §a$" + money(p));
 
