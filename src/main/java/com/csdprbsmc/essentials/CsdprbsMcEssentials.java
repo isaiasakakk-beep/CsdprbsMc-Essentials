@@ -1139,7 +1139,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void openClanInviteMenu(Player p) {
         String clan = getConfig().getString("players." + id(p) + ".clan");
         if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder de um clan pode convidar jogadores."); openClanMenu(p); return; }
-        List<Player> candidates = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p)
+        List<? extends Player> candidates = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p)
                 && getConfig().getString("players." + id(target) + ".clan") == null)
                 .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
         Inventory inv = Bukkit.createInventory(null, 54, CLAN_INVITE_MENU);
