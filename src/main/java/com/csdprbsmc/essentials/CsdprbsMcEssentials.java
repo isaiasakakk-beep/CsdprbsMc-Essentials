@@ -590,6 +590,24 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         return item;
     }
 
+    private ItemStack playerHead(Player owner, String displayName) {
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) head.getItemMeta();
+        meta.setOwningPlayer(owner);
+        meta.setDisplayName(displayName);
+        head.setItemMeta(meta);
+        return head;
+    }
+
+    private ItemStack offlineHead(UUID ownerId, String displayName) {
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) head.getItemMeta();
+        meta.setOwningPlayer(Bukkit.getOfflinePlayer(ownerId));
+        meta.setDisplayName(displayName);
+        head.setItemMeta(meta);
+        return head;
+    }
+
     private String plain(String value) {
         return value == null ? "" : org.bukkit.ChatColor.stripColor(value);
     }
@@ -1048,14 +1066,122 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void openClanMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
+        String ownClan = getConfig().getString("players." + id(p) + ".clan");
         inv.setItem(10, button(Material.NAME_TAG, "§e§lCRIAR CLAN"));
         inv.setItem(11, button(Material.PLAYER_HEAD, "§a§lCONVIDAR JOGADOR"));
+        inv.setItem(12, button(Material.BOOKSHELF, "§b§lCLANS DISPONÍVEIS"));
         inv.setItem(13, button(Material.EMERALD, "§a§lACEITAR CONVITE"));
         inv.setItem(14, button(Material.PAINTING, "§e§lPERSONALIZAR CORES"));
         inv.setItem(15, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
         inv.setItem(16, button(Material.OAK_DOOR, "§c§lSAIR DO CLAN"));
+        if (ownClan != null && id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) inv.setItem(21, button(Material.WRITABLE_BOOK, "§6§lSOLICITAÇÕES"));
         inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
+    }
+
+    private void openClanInviteMenu(Player p) {
+        String clan = getConfig().getString("players." + id(p) + ".clan");
+        if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder de um clan pode convidar jogadores."); openClanMenu(p); return; }
+        List<Player> candidates = Bukkit.getOnlinePlayers().stream().filter(target -> !target.equals(p)
+                && getConfig().getString("players." + id(target) + ".clan") == null)
+                .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
+        Inventory inv = Bukkit.createInventory(null, 54, CLAN_INVITE_MENU);
+        int slot = 0;
+        for (Player target : candidates) {
+            if (slot >= 45) break;
+            ItemStack head = playerHead(target, "§aJOGADOR: " + target.getName());
+            ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§7Clique para enviar convite ao jogador.")); head.setItemMeta(meta);
+            inv.setItem(slot++, head);
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        if (slot == 0) msg(p, "Não há jogadores online disponíveis para convidar.");
+        p.openInventory(inv);
+    }
+
+    private void openClanBrowserMenu(Player p) {
+        ConfigurationSection clans = getConfig().getConfigurationSection("clans");
+        Inventory inv = Bukkit.createInventory(null, 54, CLAN_BROWSER_MENU);
+        if (clans != null) {
+            List<String> names = new ArrayList<>(clans.getKeys(false)); names.sort(String.CASE_INSENSITIVE_ORDER);
+            int slot = 0;
+            for (String clan : names) {
+                if (slot >= 45) break;
+                String leader = getConfig().getString("clans." + clan + ".leader");
+                UUID leaderId;
+                try { leaderId = UUID.fromString(leader); } catch (Exception ex) { continue; }
+                ItemStack head = offlineHead(leaderId, "§eCLAN: " + clan);
+                ItemMeta meta = head.getItemMeta();
+                meta.setLore(List.of("§7Líder: §f" + getConfig().getString("players." + leader + ".name", "Desconhecido"),
+                        "§7Membros: §f" + getConfig().getStringList("clans." + clan + ".members").size() + "/8",
+                        "§aClique para solicitar entrada"));
+                head.setItemMeta(meta); inv.setItem(slot++, head);
+            }
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void applyToClan(Player p, String clan) {
+        if (getConfig().getString("players." + id(p) + ".clan") != null) { msg(p, "Você já está em um clan."); return; }
+        if (!getConfig().contains("clans." + clan)) { msg(p, "Esse clan não existe mais."); openClanBrowserMenu(p); return; }
+        if (getConfig().getStringList("clans." + clan + ".members").size() >= 8) { msg(p, "Esse clan está cheio."); openClanBrowserMenu(p); return; }
+        String path = "clan-applications." + clan + "." + id(p);
+        if (getConfig().contains(path)) { msg(p, "Você já solicitou entrada nesse clan."); return; }
+        getConfig().set(path, p.getName()); saveConfig();
+        String leaderId = getConfig().getString("clans." + clan + ".leader");
+        Player leader = null; try { leader = Bukkit.getPlayer(UUID.fromString(leaderId)); } catch (Exception ignored) { }
+        if (leader != null) msg(leader, "§e" + p.getName() + " solicitou entrar no seu clan. Veja as solicitações na bússola.");
+        msg(p, "Solicitação enviada ao líder do clan " + clan + "."); p.closeInventory();
+    }
+
+    private void openClanRequestsMenu(Player p) {
+        String clan = getConfig().getString("players." + id(p) + ".clan");
+        if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder pode ver as solicitações."); openClanMenu(p); return; }
+        Inventory inv = Bukkit.createInventory(null, 54, CLAN_REQUESTS_MENU);
+        ConfigurationSection requests = getConfig().getConfigurationSection("clan-applications." + clan);
+        int slot = 0;
+        if (requests != null) for (String applicant : requests.getKeys(false)) {
+            if (slot >= 45) break;
+            try {
+                UUID applicantId = UUID.fromString(applicant);
+                String playerName = requests.getString(applicant, "Desconhecido");
+                ItemStack head = offlineHead(applicantId, "§eSOLICITANTE: " + applicant);
+                ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§7Jogador: §f" + playerName, "§aClique esquerdo: aprovar", "§cClique direito: recusar")); head.setItemMeta(meta);
+                inv.setItem(slot++, head);
+            } catch (Exception ignored) { }
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        if (slot == 0) msg(p, "Seu clan não tem solicitações pendentes.");
+        p.openInventory(inv);
+    }
+
+    private void handleClanApplication(Player leader, String applicant, boolean reject) {
+        String clan = getConfig().getString("players." + id(leader) + ".clan");
+        if (clan == null || !id(leader).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(leader, "Somente o líder pode administrar solicitações."); return; }
+        String path = "clan-applications." + clan + "." + applicant;
+        if (!getConfig().contains(path)) { msg(leader, "Essa solicitação não está mais disponível."); openClanRequestsMenu(leader); return; }
+        if (reject) { getConfig().set(path, null); saveConfig(); msg(leader, "Solicitação recusada."); openClanRequestsMenu(leader); return; }
+        List<String> members = getConfig().getStringList("clans." + clan + ".members");
+        if (members.size() >= 8) { msg(leader, "Seu clan já tem 8 membros."); return; }
+        if (getConfig().getString("players." + applicant + ".clan") != null) { getConfig().set(path, null); saveConfig(); msg(leader, "Esse jogador já entrou em outro clan."); openClanRequestsMenu(leader); return; }
+        members.add(applicant); getConfig().set("clans." + clan + ".members", members);
+        getConfig().set("players." + applicant + ".clan", clan); getConfig().set(path, null); saveConfig(); refreshPlayerTags();
+        Player joined = null; try { joined = Bukkit.getPlayer(UUID.fromString(applicant)); } catch (Exception ignored) { }
+        if (joined != null) msg(joined, "Sua solicitação foi aceita! Você entrou no clan " + clan + ".");
+        msg(leader, "Jogador adicionado ao clan."); openClanRequestsMenu(leader);
+    }
+
+    private void openClanInvitesMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, CLAN_INVITES_MENU);
+        String clan = getConfig().getString("clan-invites." + id(p));
+        if (clan != null && getConfig().contains("clans." + clan)) {
+            String leader = getConfig().getString("clans." + clan + ".leader");
+            try {
+                ItemStack head = offlineHead(UUID.fromString(leader), "§eCONVITE: " + clan);
+                ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§aClique esquerdo para aceitar", "§cClique direito para recusar")); head.setItemMeta(meta); inv.setItem(13, head);
+            } catch (Exception ignored) { }
+        } else inv.setItem(13, button(Material.BARRIER, "§cNenhum convite pendente"));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
     }
 
     private void buy(Player p, String name) {
