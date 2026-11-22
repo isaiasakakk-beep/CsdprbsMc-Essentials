@@ -338,24 +338,26 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void openMainForm(Player p) {
         List<String> choices = List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA / ECONOMIA", "MISSÕES", "PROCURADOS", "CONTRATOS", "TESOUROS", "BACK - LOCAL DA MORTE");
-        if (isBedrock(p)) {
-            openBedrockSelection(p, "CSDPRBSMC ESSENTIALS", "Escolha uma opção:", choices, choice -> handleMainMenuChoice(p, choice));
+        if (!isBedrock(p)) {
+            openInventoryMainMenu(p);
             return;
         }
-        p.sendMessage(Component.text("━━━━━━━━ CSDPRBSMC ESSENTIALS ━━━━━━━━").color(net.kyori.adventure.text.format.NamedTextColor.GOLD));
-        for (int i = 0; i < choices.size(); i++) {
-            final int option = i;
-            Component button = Component.text("  [" + (i + 1) + "] " + choices.get(i))
-                    .color(i % 2 == 0 ? net.kyori.adventure.text.format.NamedTextColor.BLACK : net.kyori.adventure.text.format.NamedTextColor.GOLD)
-                    .clickEvent(ClickEvent.runCommand("/ess menu " + option));
-            p.sendMessage(button);
+        if (!openBedrockSelection(p, "CSDPRBSMC ESSENTIALS", "Escolha uma opção:", choices, choice -> handleMainMenuChoice(p, choice))) {
+            msg(p, "Não foi possível abrir o formulário Bedrock. Voltando ao menu de inventário.");
+            openInventoryMainMenu(p);
         }
-        p.sendMessage(Component.text("Clique em uma opção para abrir o menu.").color(net.kyori.adventure.text.format.NamedTextColor.GRAY));
     }
 
-    private void openBedrockSelection(Player p, String title, String content, List<String> labels, Consumer<Integer> callback) {
-        invokeBedrock("openSelection", new Class<?>[]{Player.class, String.class, String.class, List.class, Consumer.class},
-                p, title, content, labels, callback);
+    private boolean openBedrockSelection(Player p, String title, String content, List<String> labels, Consumer<Integer> callback) {
+        if (bedrockMenus == null) return false;
+        try {
+            Method target = bedrockMenus.getClass().getMethod("openSelection", Player.class, String.class, String.class, List.class, Consumer.class);
+            target.invoke(bedrockMenus, p, title, content, labels, callback);
+            return true;
+        } catch (Throwable error) {
+            getLogger().warning("Falha ao abrir formulário Bedrock: " + error.getClass().getSimpleName() + ": " + error.getMessage());
+            return false;
+        }
     }
 
     private void msg(Player p, String text) {
@@ -639,7 +641,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
-        openMainForm(p);
+        // Java mantém o inventário clássico; somente Bedrock recebe o formulário Cumulus.
+        if (isBedrock(p)) {
+            openMainForm(p);
+        } else {
+            openInventoryMainMenu(p);
+        }
     }
 
     private void openInventoryMainMenu(Player p) {
