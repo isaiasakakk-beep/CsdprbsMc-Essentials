@@ -720,7 +720,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(SHOP_CATEGORIES))) {
             openShopCategory(p, name);
         } else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) {
-            if (name.equals("VENDER ITEM DO INVENTÁRIO")) openSellSelection(p);
+            String categoryPage = title.substring(plain(SHOP_CATEGORY_PREFIX).length());
+            int marker = categoryPage.lastIndexOf(" #");
+            String category = marker < 0 ? categoryPage : categoryPage.substring(0, marker);
+            int page = 0;
+            if (marker >= 0) { try { page = Integer.parseInt(categoryPage.substring(marker + 2)) - 1; } catch (NumberFormatException ignored) { } }
+            if (name.equals("PÁGINA ANTERIOR")) openShopCategory(p, category, page - 1);
+            else if (name.equals("PRÓXIMA PÁGINA")) openShopCategory(p, category, page + 1);
+            else if (name.equals("VENDER ITEM DO INVENTÁRIO")) openSellSelection(p);
             else if (name.equals(plain(SHOP_SELL_ALL))) sellAll(p);
             else {
                 ShopProduct product = findProduct(name);
@@ -761,7 +768,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -858,20 +865,36 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openShop(Player p) {
-        Inventory inv=Bukkit.createInventory(null,27,SHOP_CATEGORIES);
-        Material[] icons={Material.DIAMOND,Material.BRICKS,Material.WHEAT,Material.COOKED_BEEF,Material.CHEST,Material.ENDER_PEARL};
-        for(int i=0;i<SHOP_CATEGORIES_LIST.size();i++)inv.setItem(10+i,button(icons[i],"§e"+SHOP_CATEGORIES_LIST.get(i)));
-        inv.setItem(22,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
+        Inventory inv = Bukkit.createInventory(null, 36, SHOP_CATEGORIES);
+        Material[] icons = {Material.DIAMOND, Material.BRICKS, Material.OAK_LOG, Material.WHEAT, Material.COOKED_BEEF, Material.REDSTONE,
+                Material.IRON_SWORD, Material.NETHERRACK, Material.PAINTING, Material.CHEST, Material.NETHER_STAR, Material.BARREL};
+        int[] slots = {10,11,12,13,14,15,16,19,20,21,22,23};
+        for (int i = 0; i < SHOP_CATEGORIES_LIST.size(); i++) inv.setItem(slots[i], button(icons[i], "§e§l" + SHOP_CATEGORIES_LIST.get(i)));
+        inv.setItem(31, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
     }
 
-    private void openShopCategory(Player p,String category) {
-        List<ShopProduct> products=SHOP_PRODUCTS.stream().filter(product->product.category().equals(category)).toList();
-        Inventory inv=Bukkit.createInventory(null,54,SHOP_CATEGORY_PREFIX+category);int slot=0;
-        for(ShopProduct product:products){if(slot>=45)break;ItemStack item=new ItemStack(product.material());ItemMeta meta=item.getItemMeta();
-            meta.setDisplayName("§f§l"+product.name()+"§f");meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique: 1 unidade","§eShift + clique: 16 unidades",product.limited()?"§cItem especial limitado":"§7Categoria: "+category));item.setItemMeta(meta);inv.setItem(slot++,item);}
-        inv.setItem(45, button(Material.GOLD_INGOT, "§a§lVENDER ITEM DO INVENTÁRIO"));
-        inv.setItem(47, button(Material.CHEST, SHOP_SELL_ALL));
-        inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));p.openInventory(inv);
+    private void openShopCategory(Player p, String category) { openShopCategory(p, category, 0); }
+
+    private void openShopCategory(Player p, String category, int requestedPage) {
+        List<ShopProduct> products = SHOP_PRODUCTS.stream().filter(product -> product.category().equals(category)).toList();
+        int pages = Math.max(1, (products.size() + 44) / 45);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        shopPages.put(p.getUniqueId(), page);
+        Inventory inv = Bukkit.createInventory(null, 54, SHOP_CATEGORY_PREFIX + category + " #" + (page + 1));
+        int start = page * 45;
+        for (int i = start; i < Math.min(start + 45, products.size()); i++) {
+            ShopProduct product = products.get(i); ItemStack item = new ItemStack(product.material()); ItemMeta meta = item.getItemMeta();
+            meta.setDisplayName("§f§l" + product.name() + "§f");
+            meta.setLore(List.of("§7Preço: §a$" + product.price(), "§eClique: 1 unidade", "§eShift + clique: 16 unidades", product.limited() ? "§cItem especial limitado" : "§7Categoria: " + category));
+            item.setItemMeta(meta); inv.setItem(i - start, item);
+        }
+        inv.setItem(45, button(Material.ARROW, "§e§lPÁGINA ANTERIOR"));
+        inv.setItem(46, button(Material.ARROW, "§e§lPRÓXIMA PÁGINA"));
+        inv.setItem(47, button(Material.GOLD_INGOT, "§a§lVENDER ITEM DO INVENTÁRIO"));
+        inv.setItem(48, button(Material.CHEST, SHOP_SELL_ALL));
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        inv.setItem(50, button(Material.PAPER, "§fPágina " + (page + 1) + "/" + pages + " • " + products.size() + " itens"));
+        p.openInventory(inv);
     }
 
     private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equals(name)).findFirst().orElse(null);}
