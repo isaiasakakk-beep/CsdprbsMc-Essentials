@@ -26,6 +26,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.util.concurrent.ThreadLocalRandom;
 import java.lang.reflect.Method;
 
@@ -50,6 +51,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String SELL_QUANTITY = "§8§lESCOLHA A QUANTIDADE";
     private static final String CLAN_COLORS = "§8§lCORES DO CLAN";
     private static final String MISSIONS = "§8§lMISSÕES E RECOMPENSAS";
+    private static final String WEEKLY_MISSIONS = "§8§lMISSÕES SEMANAIS";
+    private static final String SPECIFIC_MISSIONS = "§8§lMISSÕES ESPECÍFICAS";
     private static final String CLAN_INVITE_MENU = "§8§lCONVIDAR JOGADORES";
     private static final String CLAN_BROWSER_MENU = "§8§lCLANS DISPONÍVEIS";
     private static final String CLAN_REQUESTS_MENU = "§8§lSOLICITAÇÕES DE CLAN";
@@ -497,6 +500,17 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 msg(victim, "Sua recompensa foi reclamada por " + killer.getName() + ".");
             }
         }
+        Location deathLocation = victim.getLocation();
+        String backPath = "death-back." + id(victim);
+        getConfig().set(backPath + ".world", deathLocation.getWorld().getName());
+        getConfig().set(backPath + ".x", deathLocation.getX());
+        getConfig().set(backPath + ".y", deathLocation.getY());
+        getConfig().set(backPath + ".z", deathLocation.getZ());
+        getConfig().set(backPath + ".yaw", deathLocation.getYaw());
+        getConfig().set(backPath + ".pitch", deathLocation.getPitch());
+        getConfig().set(backPath + ".time", System.currentTimeMillis());
+        saveConfig();
+        msg(victim, "§eSeu local de morte foi salvo! Use §aBACK §ena bússola para voltar em até 30 minutos.");
         event.getDrops().removeIf(this::isCompass);
     }
 
@@ -608,6 +622,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(19, button(Material.IRON_SWORD, "§f§e§lPROCURADOS§f"));
         inv.setItem(20, button(Material.PAPER, "§f§6§lCONTRATOS§f"));
         inv.setItem(21, button(Material.CHEST, "§f§e§lTESOUROS§f"));
+        String backPath = "death-back." + id(p);
+        boolean hasBack = getConfig().contains(backPath + ".world") && getConfig().getLong(backPath + ".time") > System.currentTimeMillis() - 30L * 60 * 1000;
+        inv.setItem(22, button(Material.RECOVERY_COMPASS, hasBack ? "§a§lBACK - VOLTAR AO LOCAL DA MORTE" : "§7§lBACK - SEM LOCAL DISPONÍVEL"));
 
         p.openInventory(inv);
     }
@@ -651,7 +668,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (sellingMenu && event.getClickedInventory() != event.getView().getTopInventory()) { event.setCancelled(true); return; }
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
         boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
-                || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))
+                || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
@@ -671,6 +688,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
             else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
+            else if (title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))) openMissions(p);
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
@@ -688,6 +706,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "RANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
                 case "LOJA/ECONOMIA" -> openShop(p);
                 case "MISSÕES" -> openMissions(p);
+                case "BACK - VOLTAR AO LOCAL DA MORTE" -> teleportBack(p);
+                case "BACK - SEM LOCAL DISPONÍVEL" -> msg(p, "Você não tem um local de morte disponível. O BACK expira em 30 minutos.");
                 case "PROCURADOS" -> openBountyMenu(p);
                 case "CONTRATOS" -> openContractMenu(p);
                 case "TESOUROS" -> openTreasureMenu(p);
@@ -724,6 +744,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(MISSIONS))) {
             if (name.startsWith("MISSÃO: ")) claimMission(p, name.substring(8));
+            else if (name.equals("MISSÕES SEMANAIS")) openChallengeMenu(p, true);
+            else if (name.equals("MISSÕES ESPECÍFICAS")) openChallengeMenu(p, false);
+        } else if (title.equals(plain(WEEKLY_MISSIONS))) {
+            if (name.startsWith("DESAFIO: ") || name.startsWith("RESGATADA: ")) claimChallenge(p, name.substring(name.indexOf(": ") + 2), true);
+        } else if (title.equals(plain(SPECIFIC_MISSIONS))) {
+            if (name.startsWith("DESAFIO: ") || name.startsWith("RESGATADA: ")) claimChallenge(p, name.substring(name.indexOf(": ") + 2), false);
         } else if (title.equals(plain(TPA_MENU))) {
             if (name.equals("EU IR ATÉ ELE")) { tpaMode.put(p.getUniqueId(), false); msg(p, "Modo selecionado: você irá até o jogador."); openTpaMenu(p); }
             else if (name.equals("ELE VIR ATÉ MIM")) { tpaMode.put(p.getUniqueId(), true); msg(p, "Modo selecionado: o jogador virá até você."); openTpaMenu(p); }
@@ -1583,9 +1609,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         Player p = event.getPlayer();
         Material type = event.getBlock().getType();
-        if (type == Material.STONE) { addMissionProgress(p, "stone", 1); addContractProgress(p, "stone", 1); }
-        if ((type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE)) addMissionProgress(p, "diamonds", 1);
-        if (type == Material.ANCIENT_DEBRIS) addMissionProgress(p, "debris", 1);
+        if (type == Material.STONE) { addMissionProgress(p, "stone", 1); addContractProgress(p, "stone", 1); addChallengeProgress(p, "stone", 1); }
+        if ((type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE)) { addMissionProgress(p, "diamonds", 1); addChallengeProgress(p, "diamonds", 1); }
+        if (type == Material.ANCIENT_DEBRIS) { addMissionProgress(p, "debris", 1); addChallengeProgress(p, "debris", 1); }
         if (type == Material.OBSIDIAN) addMissionProgress(p, "obsidian", 1);
         if (type == Material.WHEAT && event.getBlock().getBlockData() instanceof org.bukkit.block.data.Ageable age
                 && age.getAge() >= age.getMaximumAge()) addMissionProgress(p, "wheat", 1);
@@ -1596,11 +1622,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Player killer = event.getEntity().getKiller();
         if (killer == null) return;
         switch (event.getEntityType()) {
-            case ZOMBIE -> { addMissionProgress(killer, "zombies", 1); addContractProgress(killer, "zombies", 1); }
+            case ZOMBIE -> { addMissionProgress(killer, "zombies", 1); addContractProgress(killer, "zombies", 1); addChallengeProgress(killer, "zombies", 1); }
             case SKELETON -> addMissionProgress(killer, "skeletons", 1);
             case CREEPER -> addMissionProgress(killer, "creepers", 1);
-            case ENDERMAN -> addMissionProgress(killer, "endermen", 1);
-            case WITHER -> addMissionProgress(killer, "wither", 1);
+            case ENDERMAN -> { addMissionProgress(killer, "endermen", 1); addChallengeProgress(killer, "endermen", 1); }
+            case WITHER -> { addMissionProgress(killer, "wither", 1); addChallengeProgress(killer, "wither", 1); }
             case ENDER_DRAGON -> addMissionProgress(killer, "dragon", 1);
             default -> { }
         }
@@ -1611,6 +1637,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (event.getState() == PlayerFishEvent.State.CAUGHT_FISH) {
             addMissionProgress(event.getPlayer(), "fish", 1);
             addContractProgress(event.getPlayer(), "fish", 1);
+            addChallengeProgress(event.getPlayer(), "fish", 1);
         }
     }
 
@@ -1631,8 +1658,85 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             item.setItemMeta(meta);
             inv.setItem(slots[i], item);
         }
+        inv.setItem(37, button(Material.CLOCK, "§e§lMISSÕES SEMANAIS"));
+        inv.setItem(43, button(Material.NETHER_STAR, "§6§lMISSÕES ESPECÍFICAS"));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
+    }
+
+    private record Challenge(String id, String name, Material icon, int target, double reward, String description) {}
+
+    private List<Challenge> weeklyChallenges() {
+        return List.of(new Challenge("stone", "Mineiro da semana", Material.STONE, 300, 1800, "Quebre 300 blocos de pedra"),
+                new Challenge("zombies", "Caçador da semana", Material.IRON_SWORD, 50, 2200, "Derrote 50 zumbis"),
+                new Challenge("diamonds", "Fortuna semanal", Material.DIAMOND, 16, 3000, "Minere 16 minérios de diamante"),
+                new Challenge("fish", "Pescaria semanal", Material.FISHING_ROD, 20, 1200, "Pesque 20 peixes"));
+    }
+
+    private List<Challenge> specificChallenges() {
+        return List.of(new Challenge("debris", "Caçador de relíquias", Material.ANCIENT_DEBRIS, 8, 4500, "Minere 8 detritos ancestrais"),
+                new Challenge("endermen", "Olhos do vazio", Material.ENDER_PEARL, 15, 3500, "Derrote 15 endermen"),
+                new Challenge("wither", "Quebra-maldições", Material.NETHER_STAR, 1, 8000, "Derrote 1 Wither"));
+    }
+
+    private String weeklyKey() { return LocalDate.now().with(DayOfWeek.MONDAY).toString(); }
+    private String weeklyPath(Player p, String mission) { return "players." + id(p) + ".weekly." + weeklyKey() + "." + mission; }
+    private String specificPath(Player p, String mission) { return "players." + id(p) + ".specific." + mission; }
+
+    private void addChallengeProgress(Player p, String id, int amount) {
+        String weekly = weeklyPath(p, id);
+        Challenge weeklyChallenge = weeklyChallenges().stream().filter(c -> c.id().equals(id)).findFirst().orElse(null);
+        if (weeklyChallenge != null && !getConfig().getBoolean(weekly + ".claimed"))
+            getConfig().set(weekly + ".progress", Math.min(weeklyChallenge.target(), getConfig().getInt(weekly + ".progress") + amount));
+        String specific = specificPath(p, id);
+        Challenge specialChallenge = specificChallenges().stream().filter(c -> c.id().equals(id)).findFirst().orElse(null);
+        if (specialChallenge != null && !getConfig().getBoolean(specific + ".claimed"))
+            getConfig().set(specific + ".progress", Math.min(specialChallenge.target(), getConfig().getInt(specific + ".progress") + amount));
+    }
+
+    private void openChallengeMenu(Player p, boolean weekly) {
+        List<Challenge> challenges = weekly ? weeklyChallenges() : specificChallenges();
+        String title = weekly ? WEEKLY_MISSIONS : SPECIFIC_MISSIONS;
+        Inventory inv = Bukkit.createInventory(null, 36, title);
+        int[] slots = weekly ? new int[]{10, 12, 14, 16} : new int[]{11, 13, 15};
+        for (int i = 0; i < challenges.size(); i++) {
+            Challenge c = challenges.get(i); String path = weekly ? weeklyPath(p, c.id()) : specificPath(p, c.id());
+            int progress = getConfig().getInt(path + ".progress"); boolean claimed = getConfig().getBoolean(path + ".claimed");
+            ItemStack item = button(c.icon(), (claimed ? "§a§lRESGATADA: " : "§e§lDESAFIO: ") + c.id());
+            ItemMeta meta = item.getItemMeta(); meta.setLore(List.of("§7" + c.description(), "§7Progresso: §f" + progress + "/" + c.target(), "§7Recompensa: §a$" + c.reward(), claimed ? "§aRecompensa recebida" : progress >= c.target() ? "§eClique para resgatar" : "§cEm andamento")); item.setItemMeta(meta);
+            inv.setItem(slots[i], item);
+        }
+        if (weekly) inv.setItem(4, button(Material.CLOCK, "§7Reinicia toda segunda-feira"));
+        else inv.setItem(4, button(Material.NETHER_STAR, "§7Desafios especiais permanentes"));
+        inv.setItem(31, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void claimChallenge(Player p, String missionId, boolean weekly) {
+        List<Challenge> list = weekly ? weeklyChallenges() : specificChallenges();
+        Challenge c = list.stream().filter(x -> x.id().equals(missionId)).findFirst().orElse(null);
+        if (c == null) return;
+        String path = weekly ? weeklyPath(p, missionId) : specificPath(p, missionId);
+        if (getConfig().getBoolean(path + ".claimed") || getConfig().getInt(path + ".progress") < c.target()) {
+            msg(p, "Esse desafio ainda não pode ser resgatado."); openChallengeMenu(p, weekly); return;
+        }
+        getConfig().set(path + ".claimed", true); addMoney(p, c.reward()); saveConfig();
+        msg(p, "Desafio concluído! Você recebeu §a$" + c.reward()); openChallengeMenu(p, weekly);
+    }
+
+    private void teleportBack(Player p) {
+        String path = "death-back." + id(p);
+        long timestamp = getConfig().getLong(path + ".time", 0);
+        if (timestamp == 0 || timestamp < System.currentTimeMillis() - 30L * 60 * 1000) {
+            getConfig().set(path, null); saveConfig(); msg(p, "Seu BACK expirou ou não existe um local de morte salvo."); openMenu(p); return;
+        }
+        World world = Bukkit.getWorld(getConfig().getString(path + ".world", ""));
+        if (world == null) { msg(p, "O mundo onde você morreu não está disponível."); return; }
+        Location destination = new Location(world, getConfig().getDouble(path + ".x"), getConfig().getDouble(path + ".y"), getConfig().getDouble(path + ".z"), (float) getConfig().getDouble(path + ".yaw"), (float) getConfig().getDouble(path + ".pitch"));
+        p.closeInventory();
+        p.teleportAsync(destination).thenAccept(success -> Bukkit.getScheduler().runTask(this, () -> {
+            if (success) { getConfig().set(path, null); saveConfig(); msg(p, "§aVocê voltou ao local onde morreu!"); }
+            else msg(p, "§cNão foi possível voltar ao local da sua morte.");
+        }));
     }
 
     private void claimMission(Player p, String missionId) {
