@@ -25,23 +25,39 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.time.LocalDate;
+import java.util.concurrent.ThreadLocalRandom;
 import java.lang.reflect.Method;
 
 public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
 
     private final Map<UUID, UUID> tpa = new HashMap<>();
+    private final Map<UUID, Boolean> tpaHere = new HashMap<>();
+    private final Map<UUID, Boolean> tpaMode = new HashMap<>();
     private final Map<UUID, Long> tpaCreated = new HashMap<>();
     private final Map<UUID, String> tagCache = new ConcurrentHashMap<>();
     private final Map<UUID, String> selectedHomes = new HashMap<>();
     private final Map<UUID, String> pendingClanInput = new ConcurrentHashMap<>();
     private final Map<UUID, ItemStack> pendingSale = new HashMap<>();
+    private final Map<UUID, Integer> pendingSaleSlot = new HashMap<>();
+    private final Map<UUID, Map<Integer, SaleSelection>> saleMenuSelections = new HashMap<>();
+    private final Map<UUID, String> pendingClanApplication = new HashMap<>();
+    private final Map<UUID, String> pendingBountyTarget = new HashMap<>();
     private final Map<UUID, String> pendingClanColorPart = new HashMap<>();
     private static final String SELL_SELECT = "§8§lSELECIONE O ITEM PARA VENDER";
     private static final String SELL_CONFIRM = "§8§lCONFIRMAR VENDA";
     private static final String SELL_QUANTITY = "§8§lESCOLHA A QUANTIDADE";
     private static final String CLAN_COLORS = "§8§lCORES DO CLAN";
     private static final String MISSIONS = "§8§lMISSÕES E RECOMPENSAS";
+    private static final String CLAN_INVITE_MENU = "§8§lCONVIDAR JOGADORES";
+    private static final String CLAN_BROWSER_MENU = "§8§lCLANS DISPONÍVEIS";
+    private static final String CLAN_REQUESTS_MENU = "§8§lSOLICITAÇÕES DE CLAN";
+    private static final String CLAN_INVITES_MENU = "§8§lCONVITES DE CLAN";
+    private static final String BOUNTY_MENU = "§8§lJOGADORES PROCURADOS";
+    private static final String CONTRACT_MENU = "§8§lCONTRATOS";
+    private static final String TREASURE_MENU = "§8§lTESOUROS";
+    private Location activeTreasure;
 
     private NamespacedKey compassKey;
     private Object bedrockMenus;
@@ -59,10 +75,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String WARP_MENU = "§6§lWARPS";
     private static final String SHOP_CATEGORIES = "§e§lLOJA - CATEGORIAS";
     private static final String SHOP_CATEGORY_PREFIX = "§e§lLOJA: ";
+    private final Map<UUID, Integer> shopPages = new HashMap<>();
     private static final String BACK_BUTTON = "§c§lVOLTAR";
     private record ShopProduct(Material material, String name, double price, String category, boolean limited) {}
-    private static final List<String> SHOP_CATEGORIES_LIST = List.of("Minérios", "Construção", "Agricultura", "Alimentos", "Utilidades", "Especiais");
-    private static final List<ShopProduct> SHOP_PRODUCTS = List.of(
+    private record SaleSelection(int sourceSlot, ItemStack item) {}
+    private static final List<String> SHOP_CATEGORIES_LIST = List.of("Minérios", "Construção", "Madeiras", "Agricultura", "Alimentos", "Redstone", "Equipamentos", "Nether e End", "Decoração", "Utilidades", "Especiais", "Diversos");
+    private static final List<ShopProduct> BASE_SHOP_PRODUCTS = List.of(
         new ShopProduct(Material.COAL,"Carvão",8,"Minérios",false), new ShopProduct(Material.RAW_IRON,"Ferro bruto",16,"Minérios",false),
         new ShopProduct(Material.IRON_INGOT,"Ferro",20,"Minérios",false), new ShopProduct(Material.RAW_GOLD,"Ouro bruto",28,"Minérios",false),
         new ShopProduct(Material.GOLD_INGOT,"Ouro",35,"Minérios",false), new ShopProduct(Material.COPPER_INGOT,"Cobre",12,"Minérios",false),
@@ -144,6 +162,68 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         new ShopProduct(Material.HEART_OF_THE_SEA, "Coração do mar", 1200, "Especiais", true)
     );
 
+    private static final List<ShopProduct> SHOP_PRODUCTS = buildShopProducts();
+
+    private static List<ShopProduct> buildShopProducts() {
+        List<ShopProduct> products = new ArrayList<>(BASE_SHOP_PRODUCTS);
+        Set<Material> used = new HashSet<>();
+        for (ShopProduct product : products) used.add(product.material());
+        for (Material material : Material.values()) {
+            if (products.size() >= 500) break;
+            String key = material.name();
+            if (!material.isItem() || material.isAir() || key.endsWith("_SPAWN_EGG")
+                    || material == Material.RECOVERY_COMPASS || used.contains(material)) continue;
+            String category = shopCategory(material);
+            double price = shopPrice(material, category);
+            boolean limited = price >= 1200 || key.contains("NETHERITE") || key.contains("TOTEM") || key.equals("ELYTRA");
+            products.add(new ShopProduct(material, prettyMaterialName(material), price, category, limited));
+            used.add(material);
+        }
+        return List.copyOf(products.subList(0, Math.min(500, products.size())));
+    }
+
+    private static String prettyMaterialName(Material material) {
+        String[] parts = material.name().toLowerCase(Locale.ROOT).split("_");
+        StringJoiner name = new StringJoiner(" ");
+        for (String part : parts) name.add(part.isEmpty() ? part : Character.toUpperCase(part.charAt(0)) + part.substring(1));
+        return name.toString();
+    }
+
+    private static String shopCategory(Material material) {
+        String n = material.name();
+        if (n.contains("NETHERITE") || n.contains("NETHER") || n.contains("END_STONE") || n.contains("PURPUR") || n.contains("CHORUS") || n.contains("SHULKER") || n.contains("ENDER")) return "Nether e End";
+        if (n.contains("ORE") || n.contains("INGOT") || n.contains("NUGGET") || n.startsWith("RAW_") || n.contains("DIAMOND") || n.contains("EMERALD") || n.contains("LAPIS") || n.contains("REDSTONE") || n.contains("QUARTZ") || n.contains("AMETHYST") || n.contains("COPPER")) return "Minérios";
+        if (material.isEdible()) return "Alimentos";
+        if (n.contains("LOG") || n.contains("WOOD") || n.contains("PLANK") || n.contains("FENCE") || n.contains("DOOR") || n.contains("TRAPDOOR") || n.contains("SIGN") || n.contains("BOAT") || n.contains("CHEST_BOAT")) return "Madeiras";
+        if (n.contains("SEED") || n.contains("WHEAT") || n.contains("CARROT") || n.contains("POTATO") || n.contains("BEETROOT") || n.contains("SUGAR_CANE") || n.contains("PUMPKIN") || n.contains("MELON") || n.contains("CROP") || n.contains("SAPLING") || n.contains("FUNGUS") || n.contains("MUSHROOM") || n.contains("BAMBOO") || n.contains("CACTUS") || n.contains("KELP") || n.contains("WART")) return "Agricultura";
+        if (n.contains("REDSTONE") || n.contains("REPEATER") || n.contains("COMPARATOR") || n.contains("PISTON") || n.contains("OBSERVER") || n.contains("HOPPER") || n.contains("DISPENSER") || n.contains("DROPPER") || n.contains("RAIL") || n.contains("LEVER") || n.contains("BUTTON") || n.contains("PRESSURE_PLATE") || n.contains("DAYLIGHT")) return "Redstone";
+        if (n.contains("SWORD") || n.contains("PICKAXE") || n.contains("AXE") || n.contains("SHOVEL") || n.contains("HOE") || n.contains("HELMET") || n.contains("CHESTPLATE") || n.contains("LEGGINGS") || n.contains("BOOTS") || n.contains("BOW") || n.contains("CROSSBOW") || n.contains("TRIDENT") || n.contains("SHIELD") || n.contains("ARMOR") || n.contains("MACE")) return "Equipamentos";
+        if (n.contains("WOOL") || n.contains("CARPET") || n.contains("GLASS") || n.contains("BANNER") || n.contains("PANE") || n.contains("CANDLE") || n.contains("FLOWER") || n.contains("POT") || n.contains("PAINTING") || n.contains("FRAME") || n.contains("HEAD") || n.contains("SKULL") || n.contains("CORAL") || n.contains("DECOR")) return "Decoração";
+        if (n.contains("STONE") || n.contains("BRICK") || n.contains("SAND") || n.contains("DIRT") || n.contains("GRAVEL") || n.contains("CONCRETE") || n.contains("TERRACOTTA") || n.contains("SLAB") || n.contains("STAIRS") || n.contains("WALL") || n.contains("OBSIDIAN") || n.contains("ICE") || n.contains("SNOW")) return "Construção";
+        if (n.contains("FISH") || n.contains("BOAT") || n.contains("MINECART") || n.contains("SADDLE") || n.contains("RAIL") || n.contains("LEAD")) return "Utilidades";
+        if (n.contains("TOTEM") || n.contains("ELYTRA") || n.contains("BEACON") || n.contains("DRAGON") || n.contains("NETHER_STAR")) return "Especiais";
+        return "Diversos";
+    }
+
+    private static double shopPrice(Material material, String category) {
+        String n = material.name();
+        if (n.contains("NETHERITE")) return 3200;
+        if (n.contains("TOTEM")) return 1800;
+        if (n.equals("ELYTRA")) return 5000;
+        if (n.contains("DIAMOND")) return 150;
+        if (n.contains("EMERALD")) return 100;
+        if (n.contains("GOLD")) return 35;
+        if (n.contains("IRON")) return 20;
+        if (n.contains("ANCIENT_DEBRIS")) return 900;
+        if (category.equals("Alimentos") || category.equals("Agricultura")) return 5;
+        if (category.equals("Equipamentos")) return n.contains("DIAMOND") ? 900 : n.contains("IRON") ? 180 : 45;
+        if (category.equals("Especiais")) return 350;
+        if (category.equals("Minérios")) return 18;
+        if (category.equals("Decoração")) return 12;
+        if (category.equals("Redstone")) return 16;
+        return 6;
+    }
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
@@ -154,7 +234,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Bukkit.getPluginManager().registerEvents(this, this);
 
         String[] commands = {
-                "ess", "tpa", "tpaccept", "tpdeny",
+                "ess", "tpa", "tpahere", "tpaccept", "tpdeny",
                 "sethome", "home", "delhome",
                 "setwarp", "warp", "delwarp",
                 "clan", "bal", "pay", "shop",
@@ -305,6 +385,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         pendingClanInput.remove(leaving);
         selectedHomes.remove(leaving);
         pendingSale.remove(leaving);
+        pendingSaleSlot.remove(leaving);
+        saleMenuSelections.remove(leaving);
+        tpaHere.remove(leaving);
+        tpaMode.remove(leaving);
+        shopPages.remove(leaving);
+        pendingClanApplication.remove(leaving);
+        pendingBountyTarget.remove(leaving);
         pendingClanColorPart.remove(leaving);
         event.getPlayer().setCustomName(null);
         event.getPlayer().setCustomNameVisible(false);
@@ -399,7 +486,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private String memberTag() {
-        return "§e§lM§6§lE§e§lM§6§lB§e§lR§6§lO";
+        return "§e§l[MEMBRO]";
     }
 
     private String playerTag(Player player) {
@@ -409,9 +496,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             String first = getConfig().getString("clans." + clan + ".color1", "§f");
             String second = getConfig().getString("clans." + clan + ".color2", first);
             String upper = clan.toUpperCase(Locale.ROOT);
-            StringBuilder styled = new StringBuilder(" §l");
+            StringBuilder styled = new StringBuilder(" §f§l[");
             for (int i = 0; i < upper.length(); i++) styled.append(i % 2 == 0 ? first : second).append(upper.charAt(i));
-            clanTag = styled.toString();
+            clanTag = styled.append("§f§l]").toString();
         }
         return memberTag() + clanTag;
     }
@@ -434,6 +521,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String tag = "";
         if (kills > 0 && kills <= 3) tag += " §6§lTOP" + kills + "-K";
         if (money > 0 && money <= 3) tag += " §e§lTOP" + money + "-$";
+        int best = Integer.MAX_VALUE;
+        if (kills > 0 && kills <= 3) best = Math.min(best, kills);
+        if (money > 0 && money <= 3) best = Math.min(best, money);
+        if (best != Integer.MAX_VALUE) tag += " §6§l[TOP " + best + "]";
         return tag;
     }
 
@@ -470,7 +561,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             });
             return;
         }
-        String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag());
+        String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag()) + rankingTag(source);
         event.renderer((player, displayName, message, viewer) ->
                 LegacyComponentSerializer.legacySection()
                         .deserialize(prefix + " §f§l" + player.getName() + "§r: ")
@@ -506,16 +597,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler(priority = EventPriority.HIGHEST)
     public void menuClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player p)) return;
-        if (event.getClickedInventory() == null
-                || event.getClickedInventory() != event.getView().getTopInventory()) return;
-
+        if (event.getClickedInventory() == null) return;
         String title = plain(event.getView().getTitle());
+        boolean sellingMenu = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY));
+        if (sellingMenu && event.getClickedInventory() != event.getView().getTopInventory()) { event.setCancelled(true); return; }
+        if (event.getClickedInventory() != event.getView().getTopInventory()) return;
         boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
-                || title.equals(plain(CLANS)) || title.equals(plain(SHOP))
+                || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
+                || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))
+                || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
                 || title.equals(plain(SHOP_CATEGORIES))
                 || title.startsWith(plain(SHOP_CATEGORY_PREFIX));
         if (!managed) return;
@@ -526,7 +620,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String name = plain(item.getItemMeta().getDisplayName());
 
         if (name.equals(plain(BACK_BUTTON))) {
-            if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); openShop(p); }
+            if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
@@ -547,7 +641,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
-            if (event.getSlot() < 45 && item != null && !item.getType().isAir()) openSellQuantity(p, item);
+            SaleSelection selection = saleMenuSelections.getOrDefault(p.getUniqueId(), Map.of()).get(event.getSlot());
+            if (selection != null) openSellQuantity(p, selection);
         } else if (title.equals(plain(SELL_QUANTITY))) {
             ItemStack selected = pendingSale.get(p.getUniqueId());
             if (selected != null) {
@@ -562,7 +657,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(SELL_CONFIRM))) {
             if (name.equals("CONFIRMAR VENDA")) confirmSale(p);
-            else if (name.equals("CANCELAR")) { pendingSale.remove(p.getUniqueId()); openSellSelection(p); }
+            else if (name.equals("CANCELAR")) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); openSellSelection(p); }
         } else if (title.equals(plain(CLAN_COLORS))) {
             if (name.startsWith("COR: ")) {
                 String code = colorCode(name.substring(5));
@@ -577,12 +672,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(MISSIONS))) {
             if (name.startsWith("MISSÃO: ")) claimMission(p, name.substring(8));
         } else if (title.equals(plain(TPA_MENU))) {
-            if (name.equals("PEDIDOS RECEBIDOS")) openTpaRequests(p);
+            if (name.startsWith("MODO: ")) { tpaMode.put(p.getUniqueId(), !tpaMode.getOrDefault(p.getUniqueId(), false)); openTpaMenu(p); }
+            else if (name.equals("PEDIDOS RECEBIDOS")) openTpaRequests(p);
             else if (name.equals("MEUS PEDIDOS")) { cancelOutgoingTpa(p); openTpaMenu(p); }
             else {
                 Player target = Bukkit.getPlayerExact(name);
                 if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais online."); openTpaMenu(p); return; }
-                sendTpa(p, target);
+                sendTpa(p, target, tpaMode.getOrDefault(p.getUniqueId(), false));
                 p.closeInventory();
             }
         } else if (title.equals(plain(TPA_REQUEST_MENU))) {
@@ -612,19 +708,33 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 ShopProduct product = findProduct(name);
                 if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
             }
+        } else if (title.equals(plain(CLAN_INVITE_MENU))) {
+            String targetName = name.startsWith("JOGADOR: ") ? name.substring(9) : "";
+            Player target = Bukkit.getPlayerExact(targetName);
+            if (target != null) { clanCommand(p, new String[]{"convidar", target.getName()}); openClanInviteMenu(p); }
+        } else if (title.equals(plain(CLAN_BROWSER_MENU))) {
+            String clan = name.startsWith("CLAN: ") ? name.substring(6) : "";
+            if (!clan.isBlank()) applyToClan(p, clan);
+        } else if (title.equals(plain(CLAN_REQUESTS_MENU))) {
+            if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
+        } else if (title.equals(plain(CLAN_INVITES_MENU))) {
+            if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else clanCommand(p, new String[]{"aceitar"}); }
         } else if (title.equals(plain(CLANS))) {
             p.closeInventory();
             if (name.equals("CRIAR CLAN")) {
                 pendingClanInput.put(p.getUniqueId(), "criar");
                 msg(p, "Digite no chat o nome do novo clan.");
             } else if (name.equals("CONVIDAR JOGADOR")) {
-                pendingClanInput.put(p.getUniqueId(), "convidar");
-                msg(p, "Digite no chat o nome do jogador que deseja convidar.");
+                openClanInviteMenu(p);
+            } else if (name.equals("CLANS DISPONÍVEIS")) {
+                openClanBrowserMenu(p);
+            } else if (name.equals("SOLICITAÇÕES")) {
+                openClanRequestsMenu(p);
             } else if (name.equals("PERSONALIZAR CORES")) {
                 String clan = getConfig().getString("players." + id(p) + ".clan");
                 if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder do clan pode personalizar as cores."); openClanMenu(p); return; }
                 pendingClanColorPart.put(p.getUniqueId(), "color1"); openClanColorMenu(p);
-            } else if (name.equals("ACEITAR CONVITE")) clanCommand(p, new String[]{"aceitar"});
+            } else if (name.equals("ACEITAR CONVITE")) openClanInvitesMenu(p);
             else if (name.equals("INFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
             else if (name.equals("SAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
         }
@@ -647,8 +757,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList();
         Inventory inv = Bukkit.createInventory(null, 54, TPA_MENU);
         int slot = 0;
-        for (Player target : targets) { if (slot >= 45) break; inv.setItem(slot++, button(Material.PLAYER_HEAD, "§a" + target.getName())); }
-        inv.setItem(45, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
+        for (Player target : targets) { if (slot >= 45) break; inv.setItem(slot++, playerHead(target, "§a" + target.getName())); }
+        boolean here = tpaMode.getOrDefault(p.getUniqueId(), false);
+        inv.setItem(45, button(Material.COMPASS, here ? "§e§lMODO: ELE VIR ATÉ MIM" : "§e§lMODO: EU IR ATÉ ELE"));
+        inv.setItem(46, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         inv.setItem(53, button(Material.PAPER, "§e§lMEUS PEDIDOS"));
         p.openInventory(inv);
@@ -797,12 +909,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void respondTpa(Player target, boolean accept) {
         UUID requesterId = tpa.remove(target.getUniqueId());
         Long created = tpaCreated.remove(target.getUniqueId());
+        boolean targetComesToRequester = tpaHere.getOrDefault(target.getUniqueId(), false);
+        tpaHere.remove(target.getUniqueId());
         if (requesterId == null || created == null) { msg(target, "Você não tem pedidos."); openTpaRequests(target); return; }
         Player requester = Bukkit.getPlayer(requesterId);
         if (System.currentTimeMillis() - created > 60_000L || requester == null) {
             msg(target, "Pedido expirado ou jogador offline."); openTpaMenu(target); return;
         }
-        if (accept) { requester.teleport(target.getLocation()); msg(target, "Pedido aceito."); msg(requester, "Seu pedido foi aceito."); }
+        if (accept) { if (targetComesToRequester) target.teleport(requester.getLocation()); else requester.teleport(target.getLocation()); msg(target, "Pedido aceito."); msg(requester, "Seu pedido foi aceito."); }
         else { msg(target, "Pedido recusado."); msg(requester, "Seu pedido foi recusado."); }
         openTpaMenu(target);
     }
@@ -811,29 +925,38 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         UUID targetId = tpa.entrySet().stream().filter(entry -> entry.getValue().equals(requester.getUniqueId()))
                 .map(Map.Entry::getKey).findFirst().orElse(null);
         if (targetId == null) { msg(requester, "Você não tem pedido enviado pendente."); return; }
-        tpa.remove(targetId); tpaCreated.remove(targetId); msg(requester, "Pedido cancelado.");
+        tpa.remove(targetId); tpaCreated.remove(targetId); tpaHere.remove(targetId); msg(requester, "Pedido cancelado.");
     }
 
     private void openSellSelection(Player p) {
         Inventory inv = Bukkit.createInventory(null, 54, SELL_SELECT);
+        Map<Integer, SaleSelection> selections = new HashMap<>();
         int slot = 0;
-        for (ItemStack stack : p.getInventory().getStorageContents()) {
+        ItemStack[] contents = p.getInventory().getStorageContents();
+        for (int sourceSlot = 0; sourceSlot < contents.length; sourceSlot++) {
+            ItemStack stack = contents[sourceSlot];
             if (stack == null || stack.getType().isAir() || isCompass(stack)) continue;
             ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == stack.getType()).findFirst().orElse(null);
             if (product == null || slot >= 45) continue;
+            ItemStack original = stack.clone();
             ItemStack display = stack.clone();
             ItemMeta meta = display.getItemMeta();
             meta.setLore(List.of("§7Quantidade: §f" + stack.getAmount(), "§7Valor total: §a$" + (Math.floor(product.price() * .5 * stack.getAmount() * 100) / 100), "§eClique para selecionar"));
             display.setItemMeta(meta);
-            inv.setItem(slot++, display);
+            inv.setItem(slot, display);
+            selections.put(slot, new SaleSelection(sourceSlot, original));
+            slot++;
         }
+        saleMenuSelections.put(p.getUniqueId(), selections);
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         if (slot == 0) msg(p, "Você não possui itens aceitos pela loja.");
         p.openInventory(inv);
     }
 
-    private void openSellQuantity(Player p, ItemStack chosen) {
+    private void openSellQuantity(Player p, SaleSelection selection) {
+        ItemStack chosen = selection.item().clone();
         pendingSale.put(p.getUniqueId(), chosen.clone());
+        pendingSaleSlot.put(p.getUniqueId(), selection.sourceSlot());
         Inventory inv = Bukkit.createInventory(null, 27, SELL_QUANTITY);
         int[] amounts = {1, 16, 32, 64};
         int[] slots = {10, 12, 14, 16};
@@ -861,26 +984,17 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void confirmSale(Player p) {
         ItemStack selected = pendingSale.remove(p.getUniqueId());
-        if (selected == null) { openSellSelection(p); return; }
-        int available = 0;
-        for (int slot = 0; slot < 36; slot++) {
-            ItemStack current = p.getInventory().getItem(slot);
-            if (current != null && current.getType() == selected.getType()) available += current.getAmount();
-        }
-        if (available < selected.getAmount()) {
-            msg(p, "Os itens mudaram no inventário. Venda cancelada.");
+        Integer sourceSlot = pendingSaleSlot.remove(p.getUniqueId());
+        saleMenuSelections.remove(p.getUniqueId());
+        if (selected == null || sourceSlot == null) { openSellSelection(p); return; }
+        ItemStack current = p.getInventory().getItem(sourceSlot);
+        if (current == null || !current.isSimilar(selected) || current.getAmount() < selected.getAmount()) {
+            msg(p, "A pilha selecionada mudou de lugar ou foi modificada. Venda cancelada para proteger seus itens.");
             openSellSelection(p);
             return;
         }
-        int remaining = selected.getAmount();
-        for (int slot = 0; slot < 36 && remaining > 0; slot++) {
-            ItemStack current = p.getInventory().getItem(slot);
-            if (current == null || current.getType() != selected.getType()) continue;
-            int take = Math.min(remaining, current.getAmount());
-            current.setAmount(current.getAmount() - take);
-            if (current.getAmount() <= 0) p.getInventory().setItem(slot, null);
-            remaining -= take;
-        }
+        current.setAmount(current.getAmount() - selected.getAmount());
+        if (current.getAmount() <= 0) p.getInventory().setItem(sourceSlot, null);
         ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == selected.getType()).findFirst().orElse(null);
         if (product == null) return;
         double total = Math.floor(product.price() * .5 * selected.getAmount() * 100) / 100;
@@ -904,11 +1018,13 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         addMoney(p, total); msg(p, "Você vendeu " + sold + " itens por $" + total + ".");
     }
 
-    private void sendTpa(Player p,Player target){
-        if(target==null||target.equals(p)||!target.isOnline()){msg(p,"Jogador inválido.");return;}
-        tpa.put(target.getUniqueId(),p.getUniqueId());tpaCreated.put(target.getUniqueId(),System.currentTimeMillis());
-        msg(p,"Pedido enviado para "+target.getName()+". Expira em 60 segundos.");
-        msg(target,p.getName()+" pediu teleporte. Use /tpaccept ou /tpdeny.");
+    private void sendTpa(Player p, Player target, boolean targetComesToRequester) {
+        if (target == null || target.equals(p) || !target.isOnline()) { msg(p, "Jogador inválido."); return; }
+        tpa.put(target.getUniqueId(), p.getUniqueId());
+        tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
+        tpaHere.put(target.getUniqueId(), targetComesToRequester);
+        msg(p, "Pedido enviado para " + target.getName() + ". Expira em 60 segundos.");
+        msg(target, targetComesToRequester ? p.getName() + " pediu para você ir até ele. Use /tpaccept ou /tpdeny." : p.getName() + " pediu para ir até você. Use /tpaccept ou /tpdeny.");
     }
 
     private void openClanColorMenu(Player p) {
@@ -982,16 +1098,21 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
-                tpa.put(target.getUniqueId(), p.getUniqueId());
-                tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
+                sendTpa(p, target, false);
+            }
 
-                msg(p, "Pedido enviado para " + target.getName() + ". Expira em 60 segundos.");
-                msg(target, p.getName() + " pediu teleporte. Use /tpaccept ou /tpdeny.");
+            case "tpahere" -> {
+                if (args.length != 1) { msg(p, "Use /tpahere <jogador>"); return true; }
+                Player target = Bukkit.getPlayerExact(args[0]);
+                if (target == null || target.equals(p)) { msg(p, "Jogador inválido."); return true; }
+                sendTpa(p, target, true);
             }
 
             case "tpaccept" -> {
                 UUID requesterId = tpa.remove(p.getUniqueId());
                 Long created = tpaCreated.remove(p.getUniqueId());
+                boolean targetComesToRequester = tpaHere.getOrDefault(p.getUniqueId(), false);
+                tpaHere.remove(p.getUniqueId());
 
                 if (requesterId == null || created == null) {
                     msg(p, "Você não tem pedidos.");
@@ -1010,7 +1131,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     return true;
                 }
 
-                requester.teleport(p.getLocation());
+                if (targetComesToRequester) p.teleport(requester.getLocation()); else requester.teleport(p.getLocation());
                 msg(p, "Pedido aceito.");
                 msg(requester, "Seu pedido foi aceito.");
             }
@@ -1018,6 +1139,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             case "tpdeny" -> {
                 tpa.remove(p.getUniqueId());
                 tpaCreated.remove(p.getUniqueId());
+                tpaHere.remove(p.getUniqueId());
                 msg(p, "Pedido recusado.");
             }
 
