@@ -331,11 +331,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
     }
 
-    private boolean isBedrock(Player p) {
-        Object result = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
-        return Boolean.TRUE.equals(result);
-    }
-
     private void openMainForm(Player p) {
         List<String> choices = List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA / ECONOMIA", "MISSÕES", "PROCURADOS", "CONTRATOS", "TESOUROS", "BACK - LOCAL DA MORTE");
         if (!isBedrock(p)) {
