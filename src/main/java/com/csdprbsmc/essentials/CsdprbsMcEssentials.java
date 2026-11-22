@@ -173,10 +173,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (products.size() >= 500) break;
             String key = material.name();
             if (!material.isItem() || material.isAir() || key.endsWith("_SPAWN_EGG")
-                    || material == Material.RECOVERY_COMPASS || used.contains(material)) continue;
+                    || Set.of("RECOVERY_COMPASS", "ENCHANTED_GOLDEN_APPLE", "BEDROCK", "BARRIER", "COMMAND_BLOCK", "CHAIN_COMMAND_BLOCK", "REPEATING_COMMAND_BLOCK", "STRUCTURE_BLOCK", "STRUCTURE_VOID", "JIGSAW", "SPAWNER", "END_PORTAL_FRAME", "DEBUG_STICK", "KNOWLEDGE_BOOK", "LIGHT", "REINFORCED_DEEPSLATE").contains(key)
+                    || used.contains(material)) continue;
             String category = shopCategory(material);
             double price = shopPrice(material, category);
-            boolean limited = price >= 1200 || key.contains("NETHERITE") || key.contains("TOTEM") || key.equals("ELYTRA");
+            boolean limited = price >= 1200 || key.contains("NETHERITE") || key.contains("TOTEM") || key.equals("ELYTRA") || key.equals("END_CRYSTAL");
             products.add(new ShopProduct(material, prettyMaterialName(material), price, category, limited));
             used.add(material);
         }
@@ -212,13 +213,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (n.contains("NETHERITE")) return 3200;
         if (n.contains("TOTEM")) return 1800;
         if (n.equals("ELYTRA")) return 5000;
+        if (category.equals("Equipamentos")) return n.contains("NETHERITE") ? 3200 : n.contains("DIAMOND") ? 900 : n.contains("IRON") ? 180 : 45;
+        if (n.equals("MACE")) return 2500;
+        if (n.equals("BEACON") || n.equals("NETHER_STAR")) return 1500;
+        if (n.equals("END_CRYSTAL")) return 800;
+        if (n.equals("SHULKER_BOX")) return 1200;
+        if (n.equals("RESPAWN_ANCHOR")) return 250;
+        if (n.equals("TNT")) return 35;
         if (n.contains("DIAMOND")) return 150;
         if (n.contains("EMERALD")) return 100;
         if (n.contains("GOLD")) return 35;
         if (n.contains("IRON")) return 20;
         if (n.contains("ANCIENT_DEBRIS")) return 900;
         if (category.equals("Alimentos") || category.equals("Agricultura")) return 5;
-        if (category.equals("Equipamentos")) return n.contains("DIAMOND") ? 900 : n.contains("IRON") ? 180 : 45;
         if (category.equals("Especiais")) return 350;
         if (category.equals("Minérios")) return 18;
         if (category.equals("Decoração")) return 12;
@@ -1571,6 +1578,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     @EventHandler
     public void missionBlockBreak(BlockBreakEvent event) {
+        if (activeTreasure != null && event.getBlock().getLocation().equals(activeTreasure)) {
+            event.setCancelled(true); msg(event.getPlayer(), "Esse baú faz parte de um evento. Abra-o para coletar o tesouro."); return;
+        }
         Player p = event.getPlayer();
         Material type = event.getBlock().getType();
         if (type == Material.STONE) { addMissionProgress(p, "stone", 1); addContractProgress(p, "stone", 1); }
