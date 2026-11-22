@@ -250,6 +250,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
 
         getServer().getScheduler().runTaskTimer(this, this::spawnTreasure, 20L * 60 * 30, 20L * 60 * 30);
+        getServer().getScheduler().runTaskTimer(this, this::saveConfig, 20L * 60 * 5, 20L * 60 * 5);
         getLogger().info("CsdprbsMc Essentials iniciado! Loja carregada com " + SHOP_PRODUCTS.size() + " itens.");
     }
 
@@ -531,8 +532,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private String rankingTag(Player player) {
         int kills = rankOf(player, "kills"), money = rankOf(player, "money");
         String tag = "";
-        if (kills > 0 && kills <= 3) tag += " §6§lTOP" + kills + "-K";
-        if (money > 0 && money <= 3) tag += " §e§lTOP" + money + "-$";
         int best = Integer.MAX_VALUE;
         if (kills > 0 && kills <= 3) best = Math.min(best, kills);
         if (money > 0 && money <= 3) best = Math.min(best, money);
@@ -598,7 +597,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(15, button(Material.EMERALD, "§f§e§lLOJA/ECONOMIA§f"));
         inv.setItem(16, button(Material.WRITABLE_BOOK, "§f§6§lMISSÕES§f"));
         inv.setItem(19, button(Material.IRON_SWORD, "§f§e§lPROCURADOS§f"));
-        inv.setItem(20, button(Material.FILLED_MAP, "§f§6§lCONTRATOS§f"));
+        inv.setItem(20, button(Material.PAPER, "§f§6§lCONTRATOS§f"));
         inv.setItem(21, button(Material.CHEST, "§f§e§lTESOUROS§f"));
 
         p.openInventory(inv);
@@ -661,7 +660,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         if (name.equals(plain(BACK_BUTTON))) {
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
-            else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS))) openMenu(p);
+            else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
+            else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
+            else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
             else if (title.equals(plain(TPA_REQUEST_MENU))) openTpaMenu(p);
@@ -1562,7 +1563,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Mission m = missions().stream().filter(x -> x.id().equals(missionId)).findFirst().orElse(null);
         if (m == null) return;
         getConfig().set(path + ".progress", Math.min(m.target(), getConfig().getInt(path + ".progress") + amount));
-        saveConfig();
     }
 
     @EventHandler
@@ -1698,7 +1698,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         DailyContract contract = dailyContracts().stream().filter(c -> c.id().equals(contractId)).findFirst().orElse(null);
         if (contract == null) return;
         getConfig().set(path + ".progress", Math.min(contract.target(), getConfig().getInt(path + ".progress") + amount));
-        saveConfig();
     }
 
     private void openContractMenu(Player p) {
