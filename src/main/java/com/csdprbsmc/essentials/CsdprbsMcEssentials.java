@@ -501,7 +501,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private String memberTag() {
-        return "§e§l[MEMBRO]";
+        return "§e[MEMBRO]";
     }
 
     private String playerTag(Player player) {
@@ -511,9 +511,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             String first = getConfig().getString("clans." + clan + ".color1", "§f");
             String second = getConfig().getString("clans." + clan + ".color2", first);
             String upper = clan.toUpperCase(Locale.ROOT);
-            StringBuilder styled = new StringBuilder(" §f§l[");
+            StringBuilder styled = new StringBuilder(" §l[");
             for (int i = 0; i < upper.length(); i++) styled.append(i % 2 == 0 ? first : second).append(upper.charAt(i));
-            clanTag = styled.append("§f§l]").toString();
+            clanTag = styled.append("]").toString();
         }
         return memberTag() + clanTag;
     }
@@ -772,7 +772,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(CLAN_REQUESTS_MENU))) {
             if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
         } else if (title.equals(plain(CLAN_INVITES_MENU))) {
-            if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else clanCommand(p, new String[]{"aceitar"}); }
+            if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else { clanCommand(p, new String[]{"aceitar"}); openClanMenu(p); } }
         } else if (title.equals(plain(BOUNTY_MENU))) {
             if (name.equals("CRIAR RECOMPENSA")) openBountyTargetMenu(p);
         } else if (title.equals(plain(BOUNTY_TARGET_MENU))) {
@@ -1789,6 +1789,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         int y = Math.min(world.getMaxHeight() - 1, world.getHighestBlockYAt(x, z) + 1);
         org.bukkit.block.Block block = world.getBlockAt(x, y, z);
         if (!block.getType().isAir()) return;
+        for (org.bukkit.block.Block neighbor : List.of(block.getRelative(1, 0, 0), block.getRelative(-1, 0, 0), block.getRelative(0, 0, 1), block.getRelative(0, 0, -1))) {
+            if (neighbor.getType() == Material.CHEST || neighbor.getType() == Material.TRAPPED_CHEST) return;
+        }
         block.setType(Material.CHEST); activeTreasure = block.getLocation();
         org.bukkit.block.Chest chest = (org.bukkit.block.Chest) block.getState();
         chest.getBlockInventory().addItem(new ItemStack(Material.DIAMOND, 1 + ThreadLocalRandom.current().nextInt(3)),
@@ -1897,7 +1900,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 getConfig().set("clan-invites." + id(target), ownClan);
                 saveConfig(); refreshPlayerTags();
 
-                msg(target, "Convite de clan recebido. Use /clan aceitar.");
+                msg(target, "Convite de clan recebido! Abra a bússola > CLANS > ACEITAR CONVITE.");
                 msg(p, "Convite enviado.");
             }
 
