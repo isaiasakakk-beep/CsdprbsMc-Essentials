@@ -213,8 +213,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (n.contains("NETHERITE")) return 3200;
         if (n.contains("TOTEM")) return 1800;
         if (n.equals("ELYTRA")) return 5000;
-        if (category.equals("Equipamentos")) return n.contains("NETHERITE") ? 3200 : n.contains("DIAMOND") ? 900 : n.contains("IRON") ? 180 : 45;
         if (n.equals("MACE")) return 2500;
+        if (category.equals("Equipamentos")) return n.contains("NETHERITE") ? 3200 : n.contains("DIAMOND") ? 900 : n.contains("IRON") ? 180 : 45;
         if (n.equals("BEACON") || n.equals("NETHER_STAR")) return 1500;
         if (n.equals("END_CRYSTAL")) return 800;
         if (n.equals("SHULKER_BOX")) return 1200;
