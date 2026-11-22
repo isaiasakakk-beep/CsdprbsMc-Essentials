@@ -192,6 +192,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private static String shopCategory(Material material) {
         String n = material.name();
+        if (n.contains("SWORD") || n.contains("PICKAXE") || n.contains("AXE") || n.contains("SHOVEL") || n.contains("HOE") || n.contains("HELMET") || n.contains("CHESTPLATE") || n.contains("LEGGINGS") || n.contains("BOOTS") || n.contains("BOW") || n.contains("CROSSBOW") || n.contains("TRIDENT") || n.contains("SHIELD") || n.contains("ARMOR") || n.contains("MACE")) return "Equipamentos";
         if (n.contains("NETHERITE") || n.contains("NETHER") || n.contains("END_STONE") || n.contains("PURPUR") || n.contains("CHORUS") || n.contains("SHULKER") || n.contains("ENDER")) return "Nether e End";
         if (n.contains("ORE") || n.contains("INGOT") || n.contains("NUGGET") || n.startsWith("RAW_") || n.contains("DIAMOND") || n.contains("EMERALD") || n.contains("LAPIS") || n.contains("REDSTONE") || n.contains("QUARTZ") || n.contains("AMETHYST") || n.contains("COPPER")) return "Minérios";
         if (material.isEdible()) return "Alimentos";
@@ -400,6 +401,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         event.getPlayer().setCustomNameVisible(false);
         tpa.entrySet().removeIf(entry -> entry.getKey().equals(leaving) || entry.getValue().equals(leaving));
         tpaCreated.keySet().removeIf(target -> !tpa.containsKey(target));
+        tpaHere.keySet().removeIf(target -> !tpa.containsKey(target));
     }
 
     @EventHandler
@@ -716,7 +718,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(MISSIONS))) {
             if (name.startsWith("MISSÃO: ")) claimMission(p, name.substring(8));
         } else if (title.equals(plain(TPA_MENU))) {
-            if (name.startsWith("MODO: ")) { tpaMode.put(p.getUniqueId(), !tpaMode.getOrDefault(p.getUniqueId(), false)); openTpaMenu(p); }
+            if (name.equals("EU IR ATÉ ELE")) { tpaMode.put(p.getUniqueId(), false); msg(p, "Modo selecionado: você irá até o jogador."); openTpaMenu(p); }
+            else if (name.equals("ELE VIR ATÉ MIM")) { tpaMode.put(p.getUniqueId(), true); msg(p, "Modo selecionado: o jogador virá até você."); openTpaMenu(p); }
             else if (name.equals("PEDIDOS RECEBIDOS")) openTpaRequests(p);
             else if (name.equals("MEUS PEDIDOS")) { cancelOutgoingTpa(p); openTpaMenu(p); }
             else {
@@ -818,8 +821,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         int slot = 0;
         for (Player target : targets) { if (slot >= 45) break; inv.setItem(slot++, playerHead(target, "§a" + target.getName())); }
         boolean here = tpaMode.getOrDefault(p.getUniqueId(), false);
-        inv.setItem(45, button(Material.COMPASS, here ? "§e§lMODO: ELE VIR ATÉ MIM" : "§e§lMODO: EU IR ATÉ ELE"));
-        inv.setItem(46, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
+        inv.setItem(45, button(Material.ENDER_PEARL, here ? "§7EU IR ATÉ ELE" : "§a§lEU IR ATÉ ELE"));
+        inv.setItem(46, button(Material.PLAYER_HEAD, here ? "§a§lELE VIR ATÉ MIM" : "§7ELE VIR ATÉ MIM"));
+        inv.setItem(47, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         inv.setItem(53, button(Material.PAPER, "§e§lMEUS PEDIDOS"));
         p.openInventory(inv);
