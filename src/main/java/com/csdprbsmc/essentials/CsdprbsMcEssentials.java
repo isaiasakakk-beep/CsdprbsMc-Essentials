@@ -43,7 +43,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Integer> pendingSaleSlot = new HashMap<>();
     private final Map<UUID, Map<Integer, SaleSelection>> saleMenuSelections = new HashMap<>();
     private final Map<UUID, String> pendingClanApplication = new HashMap<>();
-    private final Map<UUID, String> pendingBountyTarget = new HashMap<>();
+    private final Map<UUID, String> pendingBountyTarget = new ConcurrentHashMap<>();
     private final Map<UUID, String> pendingClanColorPart = new HashMap<>();
     private static final String SELL_SELECT = "§8§lSELECIONE O ITEM PARA VENDER";
     private static final String SELL_CONFIRM = "§8§lCONFIRMAR VENDA";
@@ -543,7 +543,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
     private void updatePlayerTag(Player player) {
         String prefix = playerTag(player), rank = rankingTag(player);
-        tagCache.put(player.getUniqueId(), prefix);
+        tagCache.put(player.getUniqueId(), prefix + rank);
         Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
         String teamName = "csd" + player.getUniqueId().toString().replace("-", "").substring(0, 12);
         Team team = board.getTeam(teamName);
@@ -581,7 +581,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             });
             return;
         }
-        String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag()) + rankingTag(source);
+        String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag());
         event.renderer((player, displayName, message, viewer) ->
                 LegacyComponentSerializer.legacySection()
                         .deserialize(prefix + " §f§l" + player.getName() + "§r: ")
