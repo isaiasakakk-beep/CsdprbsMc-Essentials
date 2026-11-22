@@ -9,6 +9,7 @@ softdepend: [floodgate]
 commands:
   ess:
   tpa:
+  tpahere:
   tpaccept:
   tpdeny:
   sethome:
@@ -22,6 +23,9 @@ commands:
   pay:
   shop:
   missions:
+  procurados:
+  contratos:
+  tesouro:
   topmoney:
   topkills:
   setmoney:
