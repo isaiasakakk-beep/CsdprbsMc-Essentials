@@ -93,6 +93,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String TRADE_TARGET_MENU = "§6§lESCOLHA QUEM TROCAR";
     private static final String TRADE_REQUEST_MENU = "§6§lPEDIDOS DE TROCA";
     private static final String BANK_MENU = "§e§lBANCO";
+    private static final String PROFILE_MENU = "§6§lMEU PERFIL";
+    private static final String PAY_TARGET_MENU = "§6§lESCOLHA O JOGADOR";
+    private static final String PAY_AMOUNT_MENU = "§6§lVALOR DA TRANSFERÊNCIA";
+    private final Map<UUID, UUID> pendingPayTarget = new ConcurrentHashMap<>();
     private static final String AUCTION_ITEM_MENU = "§e§lESCOLHA O ITEM";
     private static final String AUCTION_PRICE_MENU = "§e§lDEFINIR PREÇO";
     private record AuctionSelection(int sourceSlot, ItemStack item) {}
@@ -695,6 +699,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(23, button(Material.GOLD_INGOT, "§f§6§lLEILÃO"));
         inv.setItem(24, button(Material.EMERALD, "§f§e§lTROCAS"));
         inv.setItem(25, button(Material.BARREL, "§f§6§lBANCO"));
+        inv.setItem(26, button(Material.PLAYER_HEAD, "§f§e§lMEU PERFIL"));
 
         p.openInventory(inv);
     }
@@ -740,7 +745,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         boolean managed = title.equals(plain(AUCTION_MENU)) || title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TRADE_REQUEST_MENU))
-                || title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_ITEM_MENU)) || title.equals(plain(AUCTION_PRICE_MENU)) || title.equals(plain(TPA_MENU))
+                || title.equals(plain(BANK_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(PAY_TARGET_MENU)) || title.equals(plain(PAY_AMOUNT_MENU))
+                || title.equals(plain(AUCTION_ITEM_MENU)) || title.equals(plain(AUCTION_PRICE_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
@@ -758,7 +764,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (name.equals(plain(BACK_BUTTON))) {
             if (title.equals(plain(TRADE_MENU))) { cancelTrade(p, "Troca cancelada."); return; }
             if (title.equals(plain(TRADE_REQUEST_MENU))) { openTradeTargetMenu(p); return; }
-            if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU)) || title.equals(plain(PROFILE_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(PAY_TARGET_MENU))) { openBankMenu(p); return; }
+            if (title.equals(plain(PAY_AMOUNT_MENU))) { openPayTargetMenu(p); return; }
             if (title.equals(plain(AUCTION_ITEM_MENU))) { openAuction(p); return; }
             if (title.equals(plain(AUCTION_PRICE_MENU))) { openAuctionItemMenu(p); return; }
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
@@ -791,6 +799,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "LEILÃO" -> openAuction(p);
                 case "TROCAS" -> openTradeTargetMenu(p);
                 case "BANCO" -> openBankMenu(p);
+                case "MEU PERFIL" -> openProfileMenu(p);
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
@@ -859,7 +868,30 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
+        } else if (title.equals(plain(PROFILE_MENU))) {
+            // Perfil é somente leitura; o botão de voltar é tratado acima.
+        } else if (title.equals(plain(PAY_TARGET_MENU))) {
+            if (name.startsWith("JOGADOR: ")) {
+                Player target = Bukkit.getPlayerExact(name.substring("JOGADOR: ".length()));
+                if (target == null || target.equals(p)) { msg(p, "Esse jogador não está mais disponível."); openPayTargetMenu(p); return; }
+                pendingPayTarget.put(p.getUniqueId(), target.getUniqueId());
+                openPayAmountMenu(p);
+            }
+        } else if (title.equals(plain(PAY_AMOUNT_MENU))) {
+            if (name.startsWith("VALOR: ")) {
+                UUID targetId = pendingPayTarget.remove(p.getUniqueId());
+                Player target = targetId == null ? null : Bukkit.getPlayer(targetId);
+                if (target == null || target.equals(p)) { msg(p, "O jogador não está mais online."); openPayTargetMenu(p); return; }
+                String amountText = name.substring("VALOR: ".length());
+                double amount = amountText.equals("TUDO") ? money(p) : Double.parseDouble(amountText);
+                if (!Double.isFinite(amount) || amount <= 0 || money(p) < amount) { msg(p, "Saldo insuficiente."); openPayTargetMenu(p); return; }
+                money(p, money(p) - amount); addMoney(target, amount);
+                msg(p, "§aVocê enviou $" + amount + " para " + target.getName() + ".");
+                msg(target, "§aVocê recebeu $" + amount + " de " + p.getName() + ".");
+                openBankMenu(p);
+            }
         } else if (title.equals(plain(BANK_MENU))) {
+            if (name.equals("TRANSFERIR DINHEIRO")) { openPayTargetMenu(p); return; }
             if (name.startsWith("DEPOSITAR: ")) {
                 String amountText = name.substring("DEPOSITAR: ".length());
                 double amount = amountText.equals("TUDO") ? money(p) : Double.parseDouble(amountText);
@@ -942,7 +974,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1405,6 +1437,38 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (product != null) buyProduct(p, product, 1);
     }
 
+    private void openProfileMenu(Player p) {
+        String path = "players." + id(p);
+        Inventory inv = Bukkit.createInventory(null, 27, PROFILE_MENU);
+        inv.setItem(10, button(Material.GOLD_INGOT, "§eCARTEIRA: §a$" + money(p)));
+        inv.setItem(12, button(Material.BARREL, "§6BANCO: §a$" + getConfig().getDouble(path + ".bank")));
+        inv.setItem(14, button(Material.NETHER_STAR, "§eREPUTAÇÃO: §f" + getConfig().getInt(path + ".reputation")));
+        inv.setItem(16, button(Material.IRON_SWORD, "§cKILLS: §f" + getConfig().getInt(path + ".kills")));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void openPayTargetMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, PAY_TARGET_MENU);
+        int slot = 0;
+        for (Player target : Bukkit.getOnlinePlayers().stream().filter(other -> !other.equals(p)).sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList()) {
+            if (slot >= 45) break;
+            inv.setItem(slot++, playerHead(target, "§eJOGADOR: " + target.getName()));
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void openPayAmountMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, PAY_AMOUNT_MENU);
+        double[] amounts = {10, 50, 100, 500, 1000};
+        int[] slots = {10, 11, 12, 13, 14};
+        for (int i=0;i<amounts.length;i++) inv.setItem(slots[i], button(Material.GOLD_INGOT, "§eVALOR: " + (long)amounts[i]));
+        inv.setItem(16, button(Material.EMERALD_BLOCK, "§a§lVALOR: TUDO"));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
     private void openBankMenu(Player p) {
         String path = "players." + id(p) + ".bank";
         Inventory inv = Bukkit.createInventory(null, 54, BANK_MENU);
@@ -1418,6 +1482,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
         inv.setItem(16, button(Material.EMERALD_BLOCK, "§a§lDEPOSITAR: TUDO"));
         inv.setItem(34, button(Material.GOLD_BLOCK, "§e§lSACAR: TUDO"));
+        inv.setItem(40, button(Material.EMERALD, "§a§lTRANSFERIR DINHEIRO"));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
