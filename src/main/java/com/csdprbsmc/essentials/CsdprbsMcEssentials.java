@@ -1033,8 +1033,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         p.openInventory(inv);
     }
 
-    private double shopPrice(ShopProduct product) { return getConfig().getDouble("shop.prices." + product.material().name(), product.price()); }
-    private boolean shopLimited(ShopProduct product) { return getConfig().getBoolean("shop.limited." + product.material().name(), product.limited()); }
+    private double shopPrice(ShopProduct product) { return getConfig().getDouble("shop.prices." + product.material().name(), shopPrice(product)); }
+    private boolean shopLimited(ShopProduct product) { return getConfig().getBoolean("shop.limited." + product.material().name(), shopLimited(product)); }
 
     private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equalsIgnoreCase(name)).findFirst().orElse(null);}
     private void openShopSearchResults(Player p, String query) {
