@@ -10,17 +10,10 @@ repositories {
 
     maven {
         url = 'https://repo.papermc.io/repository/maven-public/'
-    }
-
-    maven {
-        url = 'https://repo.opencollab.dev/main/'
-    }
-}
+    }}
 
 dependencies {
-    compileOnly 'io.papermc.paper:paper-api:26.3.build.+'
-    compileOnly 'org.geysermc.floodgate:api:2.2.5-SNAPSHOT'
-}
+    compileOnly 'io.papermc.paper:paper-api:26.3.build.+'}
 
 java {
     toolchain {
