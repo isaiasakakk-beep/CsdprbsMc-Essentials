@@ -378,6 +378,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saleMenuSelections.remove(leaving);
         tpaHere.remove(leaving);
         tpaMode.remove(leaving);
+        tradeRequests.remove(leaving); tradeRequests.values().removeIf(value -> value.equals(leaving));
+        auctionSlots.remove(leaving); pendingShopSearch.remove(leaving);
         shopPages.remove(leaving);
         pendingClanApplication.remove(leaving);
         pendingBountyTarget.remove(leaving);
@@ -734,6 +736,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (title.equals(plain(AUCTION_MENU))) { openMenu(p); return; }
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
+            else if (title.equals(plain(SHOP_SEARCH_MENU))) openShop(p);
             else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
             else if (title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))) openMissions(p);
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU))) openMenu(p);
@@ -837,7 +840,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             String category = marker < 0 ? categoryPage : categoryPage.substring(0, marker);
             int page = 0;
             if (marker >= 0) { try { page = Integer.parseInt(categoryPage.substring(marker + 2)) - 1; } catch (NumberFormatException ignored) { } }
-            if (name.equals("PÁGINA ANTERIOR")) openShopCategory(p, category, page - 1);
+            if (name.equals("PESQUISAR ITEM")) { pendingShopSearch.put(p.getUniqueId(), "shop"); p.closeInventory(); msg(p, "Digite o nome do item que deseja pesquisar na loja."); }
+            else if (name.equals("PÁGINA ANTERIOR")) openShopCategory(p, category, page - 1);
             else if (name.equals("PRÓXIMA PÁGINA")) openShopCategory(p, category, page + 1);
             else if (name.equals("VENDER ITEM DO INVENTÁRIO")) openSellSelection(p);
             else if (name.equals(plain(SHOP_SELL_ALL))) sellAll(p);
@@ -1018,6 +1022,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(48, button(Material.CHEST, SHOP_SELL_ALL));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         inv.setItem(50, button(Material.PAPER, "§fPágina " + (page + 1) + "/" + pages + " • " + products.size() + " itens"));
+        inv.setItem(51, button(Material.NAME_TAG, "§e§lPESQUISAR ITEM"));
         p.openInventory(inv);
     }
 
@@ -1435,6 +1440,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (event.getClickedInventory() == event.getView().getBottomInventory()) {
             int slot = event.getSlot(); if (slot < 0 || slot >= 36) return;
             ItemStack clicked = p.getInventory().getItem(slot); if (clicked == null || clicked.getType().isAir()) return;
+            if (session.offers.get(p.getUniqueId()).size() >= 18) { msg(p, "Limite de 18 espaços de oferta por jogador."); return; }
             session.offers.get(p.getUniqueId()).add(clicked.clone()); p.getInventory().setItem(slot, null);
             session.accepted.clear(); Player other = Bukkit.getPlayer(session.other(p.getUniqueId())); if (other != null) openTradeMenu(other); openTradeMenu(p); return;
         }
@@ -1514,7 +1520,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         double price=getConfig().getDouble(path+".price"); if(money(p)<price){msg(p,"Saldo insuficiente.");return;}
         ItemStack item=getConfig().getItemStack(path+".item"); if(item==null){getConfig().set(path,null);saveConfig();openAuction(p);return;}
         if(p.getInventory().firstEmpty()==-1){msg(p,"Libere espaço no inventário antes de comprar.");return;}
-        money(p,money(p)-price); getConfig().set("players."+owner+".money",getConfig().getDouble("players."+owner+".money",100)+price);
+        money(p,money(p)-price); getConfig().set("players."+owner+".money",getConfig().getDouble("players."+owner+".money",100)+price); refreshPlayerTags();
         Player seller=Bukkit.getPlayer(UUID.fromString(owner)); if(seller!=null)msg(seller,"§aSeu anúncio foi vendido por $"+price+".");
         p.getInventory().addItem(item); getConfig().set(path,null); saveConfig(); msg(p,"§aCompra realizada!"); openAuction(p);
     }
@@ -1570,6 +1576,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
 
             case "tpaccept" -> {
+                if (inCombat(p)) { msg(p, "§cVocê não pode aceitar TPA durante um combate."); return true; }
                 UUID requesterId = tpa.remove(p.getUniqueId());
                 Long created = tpaCreated.remove(p.getUniqueId());
                 boolean targetComesToRequester = tpaHere.getOrDefault(p.getUniqueId(), false);
