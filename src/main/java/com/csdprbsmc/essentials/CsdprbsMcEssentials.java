@@ -717,7 +717,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         boolean sellingMenu = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY));
         if (sellingMenu && event.getClickedInventory() != event.getView().getTopInventory()) { event.setCancelled(true); return; }
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
-        boolean managed = title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
+        boolean managed = title.equals(plain(AUCTION_MENU)) || title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
