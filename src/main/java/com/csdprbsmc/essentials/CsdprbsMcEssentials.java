@@ -258,6 +258,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         compassKey = new NamespacedKey(this, "main_compass");
 
         Bukkit.getPluginManager().registerEvents(this, this);
+        Bukkit.getScheduler().runTask(this, () -> {
+            for (Player online : Bukkit.getOnlinePlayers()) { online.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard()); giveCompass(online); updatePlayerTag(online); }
+        });
 
         String[] commands = {
                 "ess", "tpa", "tpahere", "tpaccept", "tpdeny", "procurados", "contratos", "tesouro",
@@ -1401,7 +1404,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (args[0].equalsIgnoreCase("aceitar")) {
             UUID requesterId = tradeRequests.remove(p.getUniqueId());
             Player requester = requesterId == null ? null : Bukkit.getPlayer(requesterId);
-            if (requester == null || tradeByPlayer.containsKey(p.getUniqueId()) || tradeByPlayer.containsKey(requester.getUniqueId())) { msg(p, "Solicitação expirada ou um jogador já está em outra troca."); return; }
+            if (requester == null || inCombat(p) || (requester != null && inCombat(requester)) || tradeByPlayer.containsKey(p.getUniqueId()) || tradeByPlayer.containsKey(requester.getUniqueId())) { msg(p, "Solicitação expirada ou um jogador está indisponível para trocar."); return; }
             TradeSession session = new TradeSession(requester.getUniqueId(), p.getUniqueId());
             tradeByPlayer.put(session.a, session); tradeByPlayer.put(session.b, session);
             openTradeMenu(requester); openTradeMenu(p); msg(requester, p.getName() + " aceitou sua solicitação de troca.");
@@ -1623,6 +1626,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                     msg(p, "O jogador saiu do servidor.");
                     return true;
                 }
+                if (inCombat(requester)) { msg(p, "§cO outro jogador está em combate. O teleporte foi cancelado."); return true; }
 
                 if (targetComesToRequester) p.teleport(requester.getLocation()); else requester.teleport(p.getLocation());
                 msg(p, "Pedido aceito.");
