@@ -109,7 +109,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         TradeSession(UUID a, UUID b) { this.a=a; this.b=b; offers.put(a,new ArrayList<>()); offers.put(b,new ArrayList<>()); }
         UUID other(UUID id) { return id.equals(a) ? b : a; }
     }
-    private static final String SHOP_SEARCH_MENU = "§e§lPESQUISA DA LOJA";
+    private static final String SHOP_SEARCH_MENU = "§e§lCATÁLOGO DA LOJA";
     private static final String BACK_BUTTON = "§c§lVOLTAR";
     private record ShopProduct(Material material, String name, double price, String category, boolean limited) {}
     private record SaleSelection(int sourceSlot, ItemStack item) {}
@@ -1419,7 +1419,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private void openClanDissolveMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLAN_DISSOLVE_MENU);
         inv.setItem(11, button(Material.RED_WOOL, "§c§lCONFIRMAR DISSOLUÇÃO"));
-        inv.setItem(15, button(Material.LIME_WOOL, "§a§lCANCELAR"));
+        inv.setItem(15, button(Material.LIME_WOOL, BACK_BUTTON));
         p.openInventory(inv);
     }
 
