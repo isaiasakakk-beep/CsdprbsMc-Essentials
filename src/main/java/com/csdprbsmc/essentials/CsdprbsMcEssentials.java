@@ -644,13 +644,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void formatChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
-        String bountyTarget = pendingBountyTarget.remove(source.getUniqueId());
-        if (bountyTarget != null) {
-            String amountText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-            event.setCancelled(true);
-            Bukkit.getScheduler().runTask(this, () -> setBountyFromChat(source, bountyTarget, amountText));
-            return;
-        }
         String prefix = tagCache.getOrDefault(source.getUniqueId(), memberTag());
         event.renderer((player, displayName, message, viewer) ->
                 LegacyComponentSerializer.legacySection()
