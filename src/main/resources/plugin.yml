@@ -33,6 +33,7 @@ commands:
   bank:
   trade:
   auction:
+  shopadmin:
 
 permissions:
   csdprbsmc.admin:
