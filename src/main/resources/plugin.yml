@@ -1,5 +1,5 @@
 name: CsdprbsMcEssentials
-version: 1.4.0
+version: 1.5.0
 main: com.csdprbsmc.essentials.CsdprbsMcEssentials
 api-version: '26.3'
 author: CsdprbsMc
@@ -30,6 +30,9 @@ commands:
   setmoney:
   tagadmin:
   reputacao:
+  bank:
+  trade:
+  auction:
 
 permissions:
   csdprbsmc.admin:
