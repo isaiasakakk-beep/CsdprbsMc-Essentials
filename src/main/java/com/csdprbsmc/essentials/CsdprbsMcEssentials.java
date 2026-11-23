@@ -470,8 +470,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             addMoney(killer, 10);
             refreshPlayerTags();
             msg(killer, "Você ganhou §a$10 §fe uma kill!");
-            double stolen = money(victim); money(victim, 0);
-            if (stolen > 0) { addMoney(killer, stolen); msg(killer, "Você roubou §a$" + stolen + " de " + victim.getName() + "."); }
+            double walletStolen = money(victim);
+            String victimBankPath = "players." + id(victim) + ".bank";
+            double bankStolen = getConfig().getDouble(victimBankPath, 0);
+            double stolen = walletStolen + bankStolen;
+            money(victim, 0); getConfig().set(victimBankPath, 0); saveConfig();
+            if (stolen > 0) { addMoney(killer, stolen); msg(killer, "Você roubou §a$" + stolen + " de " + victim.getName() + " (carteira + banco)."); }
             addReputation(killer, 1); addReputation(victim, -1);
             msg(victim, "§cVocê morreu! Você perdeu seu dinheiro roubado por " + killer.getName() + ". Tente recuperá-lo matando ela de volta!");
             combatUntil.remove(victim.getUniqueId()); combatUntil.remove(killer.getUniqueId());
@@ -539,7 +543,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         ItemStack offhand = quitter.getInventory().getItemInOffHand(); if (offhand != null && !offhand.getType().isAir() && !isCompass(offhand)) at.getWorld().dropItemNaturally(at, offhand.clone());
         quitter.getInventory().clear(); quitter.getInventory().setArmorContents(null); quitter.getInventory().setItemInOffHand(null);
         if (opponent != null) {
-            double stolen = money(quitter); money(quitter, 0); if (stolen > 0) addMoney(opponent, stolen);
+            double walletStolen = money(quitter);
+            String quitterBankPath = "players." + id(quitter) + ".bank";
+            double bankStolen = getConfig().getDouble(quitterBankPath, 0);
+            double stolen = walletStolen + bankStolen;
+            money(quitter, 0); getConfig().set(quitterBankPath, 0); saveConfig();
+            if (stolen > 0) addMoney(opponent, stolen);
             String kp = "players." + id(opponent) + ".kills"; getConfig().set(kp, getConfig().getInt(kp) + 1);
             addReputation(opponent, 1); addReputation(quitter, -1);
             msg(opponent, "§a" + quitter.getName() + " fugiu do combate! Você venceu e recebeu os itens e $" + stolen + ".");
