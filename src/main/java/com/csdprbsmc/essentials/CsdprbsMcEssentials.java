@@ -82,7 +82,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Integer> shopPages = new HashMap<>();
     private final Map<UUID, Long> combatUntil = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> combatOpponent = new ConcurrentHashMap<>();
-    private final Map<UUID, String> pendingShopSearch = new ConcurrentHashMap<>();
     private final Map<UUID, TradeSession> tradeByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> tradeRequests = new ConcurrentHashMap<>();
     private final Map<UUID, Map<Integer, String>> auctionSlots = new ConcurrentHashMap<>();
@@ -393,7 +392,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         tpaHere.remove(leaving);
         tpaMode.remove(leaving);
         tradeRequests.remove(leaving); tradeRequests.values().removeIf(value -> value.equals(leaving));
-        auctionSlots.remove(leaving); pendingShopSearch.remove(leaving);
+        auctionSlots.remove(leaving);
         shopPages.remove(leaving);
         pendingClanApplication.remove(leaving);
         pendingBountyTarget.remove(leaving);
@@ -645,11 +644,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void formatChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
-        String shopSearch = pendingShopSearch.remove(source.getUniqueId());
-        if (shopSearch != null) {
-            String query = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-            event.setCancelled(true); Bukkit.getScheduler().runTask(this, () -> openShopSearchResults(source, query)); return;
-        }
         String bountyTarget = pendingBountyTarget.remove(source.getUniqueId());
         if (bountyTarget != null) {
             String amountText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
@@ -740,7 +734,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
                 || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))
-                || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(BOUNTY_TARGET_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
+                || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(BOUNTY_TARGET_MENU)) || title.equals(plain(BOUNTY_AMOUNT_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
                 || title.equals(plain(SHOP_CATEGORIES))
                 || title.startsWith(plain(SHOP_CATEGORY_PREFIX));
         if (!managed) return;
@@ -760,6 +754,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (title.equals(plain(AUCTION_PRICE_MENU))) { openAuctionItemMenu(p); return; }
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
+            else if (title.equals(plain(BOUNTY_AMOUNT_MENU))) openBountyTargetMenu(p);
             else if (title.equals(plain(SHOP_SEARCH_MENU))) openShop(p);
             else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
             else if (title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))) openMissions(p);
@@ -1143,16 +1138,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         p.openInventory(inv);
     }
 
-    private void openShopSearchResults(Player p, String query) {
-        if (query == null || query.isBlank()) { msg(p, "Pesquisa vazia."); openShop(p); return; }
-        String normalized = query.toLowerCase(Locale.ROOT);
-        List<ShopProduct> matches = SHOP_PRODUCTS.stream().filter(product -> product.name().toLowerCase(Locale.ROOT).contains(normalized) || product.material().name().toLowerCase(Locale.ROOT).contains(normalized)).limit(45).toList();
-        Inventory inv = Bukkit.createInventory(null, 54, SHOP_SEARCH_MENU);
-        for (int i=0;i<matches.size();i++) { ShopProduct product=matches.get(i); ItemStack item=new ItemStack(product.material()); ItemMeta meta=item.getItemMeta(); meta.setDisplayName("§f§l"+product.name()); meta.setLore(List.of("§7Preço: §a$"+shopPrice(product),"§eClique para comprar 1","§eShift + clique para comprar 16")); item.setItemMeta(meta); inv.setItem(i,item); }
-        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
-        if (matches.isEmpty()) msg(p, "Nenhum item encontrado para: " + query);
-    }
-
     private void buyProduct(Player p, ShopProduct product, int amount) {
         if (product == null || amount < 1) return;
         if (shopLimited(product)) amount = 1;
@@ -1320,7 +1305,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
         tpaHere.put(target.getUniqueId(), targetComesToRequester);
         msg(p, "Pedido enviado para " + target.getName() + ". Expira em 60 segundos.");
-        msg(target, targetComesToRequester ? p.getName() + " pediu para você ir até ele. Use /tpaccept ou /tpdeny." : p.getName() + " pediu para ir até você. Use /tpaccept ou /tpdeny.");
+        msg(target, targetComesToRequester ? p.getName() + " pediu para você ir até ele. Abra a bússola > TPA > Pedidos recebidos." : p.getName() + " pediu para ir até você. Abra a bússola > TPA > Pedidos recebidos.");
     }
 
     private void openClanColorMenu(Player p) {
