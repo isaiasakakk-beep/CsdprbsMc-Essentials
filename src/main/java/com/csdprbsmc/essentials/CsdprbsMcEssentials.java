@@ -98,6 +98,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String TRADE_REQUEST_MENU = "§6§lPEDIDOS DE TROCA";
     private static final String BANK_MENU = "§e§lBANCO";
     private static final String PROFILE_MENU = "§6§lMEU PERFIL";
+    private static final String RANKINGS_MENU = "§e§lRANKINGS TOP 10";
     private static final String PAY_TARGET_MENU = "§6§lESCOLHA O JOGADOR";
     private static final String PAY_AMOUNT_MENU = "§6§lVALOR DA TRANSFERÊNCIA";
     private final Map<UUID, UUID> pendingPayTarget = new ConcurrentHashMap<>();
@@ -727,7 +728,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         boolean managed = title.equals(plain(AUCTION_MENU)) || title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TRADE_REQUEST_MENU))
-                || title.equals(plain(BANK_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(PAY_TARGET_MENU)) || title.equals(plain(PAY_AMOUNT_MENU))
+                || title.equals(plain(BANK_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU)) || title.equals(plain(PAY_TARGET_MENU)) || title.equals(plain(PAY_AMOUNT_MENU))
                 || title.equals(plain(AUCTION_ITEM_MENU)) || title.equals(plain(AUCTION_PRICE_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
@@ -747,7 +748,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (name.equals(plain(BACK_BUTTON))) {
             if (title.equals(plain(TRADE_MENU))) { cancelTrade(p, "Troca cancelada."); return; }
             if (title.equals(plain(TRADE_REQUEST_MENU))) { openTradeTargetMenu(p); return; }
-            if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU)) || title.equals(plain(PROFILE_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU))) { openMenu(p); return; }
             if (title.equals(plain(PAY_TARGET_MENU))) { openBankMenu(p); return; }
             if (title.equals(plain(PAY_AMOUNT_MENU))) { openPayTargetMenu(p); return; }
             if (title.equals(plain(AUCTION_ITEM_MENU))) { openAuction(p); return; }
@@ -774,7 +775,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "HOME" -> openHomeMenu(p);
                 case "WARPS" -> openWarpMenu(p);
                 case "CLANS" -> openClanMenu(p);
-                case "RANKINGS" -> { p.closeInventory(); showTop(p, "kills"); showTop(p, "money"); }
+                case "RANKINGS" -> openRankingsMenu(p);
                 case "LOJA/ECONOMIA" -> openShop(p);
                 case "MISSÕES" -> openMissions(p);
                 case "BACK - VOLTAR AO LOCAL DA MORTE" -> teleportBack(p);
@@ -854,8 +855,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
-        } else if (title.equals(plain(PROFILE_MENU))) {
-            // Perfil é somente leitura; o botão de voltar é tratado acima.
+        } else if (title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU))) {
+            // Perfil e rankings são somente leitura; o botão de voltar é tratado acima.
         } else if (title.equals(plain(PAY_TARGET_MENU))) {
             if (name.startsWith("JOGADOR: ")) {
                 Player target = Bukkit.getPlayerExact(name.substring("JOGADOR: ".length()));
@@ -1013,7 +1014,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(CLAN_MANAGE_MENU) || title.equals(CLAN_MEMBER_ACTION_MENU) || title.equals(CLAN_DISSOLVE_MENU) || title.equals(CLAN_INFO_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(RANKINGS_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(CLAN_MANAGE_MENU) || title.equals(CLAN_MEMBER_ACTION_MENU) || title.equals(CLAN_DISSOLVE_MENU) || title.equals(CLAN_INFO_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -2416,6 +2417,38 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveConfig();
         msg(p, "Missão concluída! Você recebeu §a$" + m.reward());
         openMissions(p);
+    }
+
+    private void openRankingsMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, RANKINGS_MENU);
+        inv.setItem(4, button(Material.IRON_SWORD, "§c§lTOP 10 KILLS"));
+        inv.setItem(22, button(Material.GOLD_INGOT, "§e§lTOP 10 MONEY"));
+        ConfigurationSection section = getConfig().getConfigurationSection("players");
+        if (section != null) {
+            List<Map.Entry<String, Double>> kills = new ArrayList<>();
+            List<Map.Entry<String, Double>> moneyEntries = new ArrayList<>();
+            for (String uuid : section.getKeys(false)) {
+                String playerName = getConfig().getString("players." + uuid + ".name", "Desconhecido");
+                kills.add(Map.entry(playerName, getConfig().getDouble("players." + uuid + ".kills")));
+                moneyEntries.add(Map.entry(playerName, moneyById(uuid)));
+            }
+            kills.sort(Map.Entry.<String, Double>comparingByValue().reversed());
+            moneyEntries.sort(Map.Entry.<String, Double>comparingByValue().reversed());
+            for (int i = 0; i < Math.min(10, kills.size()); i++) {
+                Map.Entry<String, Double> entry = kills.get(i);
+                inv.setItem(9 + i, button(Material.PAPER, "§6#" + (i + 1) + " §f" + entry.getKey() + " §7- §c" + entry.getValue().intValue() + " kills"));
+            }
+            for (int i = 0; i < Math.min(10, moneyEntries.size()); i++) {
+                Map.Entry<String, Double> entry = moneyEntries.get(i);
+                inv.setItem(28 + i, button(Material.PAPER, "§6#" + (i + 1) + " §f" + entry.getKey() + " §7- §a$" + entry.getValue()));
+            }
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private double moneyById(String playerId) {
+        return getConfig().getDouble("players." + playerId + ".money");
     }
 
     private void showTop(Player p, String type) {
