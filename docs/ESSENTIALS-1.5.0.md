@@ -25,6 +25,10 @@ Java and Bedrock players use the same inventory-based menus. The previous Floodg
 
 When a player kills another player, the killer takes all money from the victim's wallet and bank. Both balances become zero. Kills increase reputation by one and deaths decrease it by one.
 
+
+- The compass **Meu Perfil** screen shows wallet, bank, reputation and kills.
+- Money transfers are available from **Banco > Transferir dinheiro**, by choosing an online player and a preset amount or all wallet funds.
+
 ## Player trades
 - The compass opens the player list for starting a trade.
 - Incoming requests are shown in **Trocas > Pedidos recebidos**, with accept and decline buttons.
