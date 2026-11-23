@@ -264,7 +264,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 "sethome", "home", "delhome",
                 "setwarp", "warp", "delwarp",
                 "clan", "bal", "pay", "shop",
-                "topmoney", "topkills", "setmoney", "tagadmin", "reputacao", "bank", "trade", "auction"
+                "topmoney", "topkills", "setmoney", "tagadmin", "reputacao", "bank", "trade", "auction", "shopadmin"
         };
 
         for (String name : commands) {
@@ -1020,7 +1020,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         for (int i = start; i < Math.min(start + 45, products.size()); i++) {
             ShopProduct product = products.get(i); ItemStack item = new ItemStack(product.material()); ItemMeta meta = item.getItemMeta();
             meta.setDisplayName("§f§l" + product.name() + "§f");
-            meta.setLore(List.of("§7Preço: §a$" + product.price(), "§eClique: 1 unidade", "§eShift + clique: 16 unidades", product.limited() ? "§cItem especial limitado" : "§7Categoria: " + category));
+            meta.setLore(List.of("§7Preço: §a$" + shopPrice(product), "§eClique: 1 unidade", "§eShift + clique: 16 unidades", shopLimited(product) ? "§cItem especial limitado" : "§7Categoria: " + category));
             item.setItemMeta(meta); inv.setItem(i - start, item);
         }
         inv.setItem(45, button(Material.ARROW, "§e§lPÁGINA ANTERIOR"));
@@ -1032,6 +1032,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(51, button(Material.NAME_TAG, "§e§lPESQUISAR ITEM"));
         p.openInventory(inv);
     }
+
+    private double shopPrice(ShopProduct product) { return getConfig().getDouble("shop.prices." + product.material().name(), product.price()); }
+    private boolean shopLimited(ShopProduct product) { return getConfig().getBoolean("shop.limited." + product.material().name(), product.limited()); }
 
     private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equalsIgnoreCase(name)).findFirst().orElse(null);}
     private void openShopSearchResults(Player p, String query) {
@@ -1837,6 +1840,18 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
             }
 
+            case "shopadmin" -> {
+                if (!sender.hasPermission("csdprbsmc.admin")) { sender.sendMessage("Você não tem permissão."); return true; }
+                if (args.length != 3) { sender.sendMessage("Use /shopadmin preco <MATERIAL> <valor> ou /shopadmin limite <MATERIAL> <true|false>"); return true; }
+                Material material = Material.matchMaterial(args[1]); if (material == null || !material.isItem()) { sender.sendMessage("Material inválido."); return true; }
+                if (args[0].equalsIgnoreCase("preco")) {
+                    try { double value = Double.parseDouble(args[2].replace(",", ".")); if (!Double.isFinite(value) || value <= 0) throw new NumberFormatException(); getConfig().set("shop.prices." + material.name(), value); saveConfig(); sender.sendMessage("Preço atualizado para " + material.name() + ": $" + value); }
+                    catch (NumberFormatException ex) { sender.sendMessage("Preço inválido."); }
+                } else if (args[0].equalsIgnoreCase("limite")) {
+                    if (!args[2].equalsIgnoreCase("true") && !args[2].equalsIgnoreCase("false")) { sender.sendMessage("Use true ou false."); return true; }
+                    getConfig().set("shop.limited." + material.name(), Boolean.parseBoolean(args[2])); saveConfig(); sender.sendMessage("Limite atualizado para " + material.name() + ".");
+                } else sender.sendMessage("Use preco ou limite.");
+            }
             case "bank" -> handleBankCommand(p, args);
             case "trade" -> handleTradeCommand(p, args);
             case "auction" -> handleAuctionCommand(p, args);
