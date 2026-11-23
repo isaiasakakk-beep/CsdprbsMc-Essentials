@@ -756,8 +756,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
             else if (title.equals(plain(BOUNTY_AMOUNT_MENU))) openBountyTargetMenu(p);
             else if (title.equals(plain(SHOP_SEARCH_MENU))) openShop(p);
-            else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU)) || title.equals(plain(CLAN_MANAGE_MENU))
-                || title.equals(plain(CLAN_MEMBER_ACTION_MENU)) || title.equals(plain(CLAN_DISSOLVE_MENU)) || title.equals(plain(CLAN_INFO_MENU))) openClanMenu(p);
+            else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
             else if (title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))) openMissions(p);
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
