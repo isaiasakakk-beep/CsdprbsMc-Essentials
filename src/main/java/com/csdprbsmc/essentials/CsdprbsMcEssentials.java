@@ -902,9 +902,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         } else if (title.equals(plain(CLAN_REQUESTS_MENU))) {
             if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
         } else if (title.equals(plain(TRADE_REQUEST_MENU))) {
-            if (name.equals("ACEITAR TROCA")) handleTradeCommand(p, new String[]{"aceitar"});
-            else if (name.equals("RECUSAR TROCA")) handleTradeCommand(p, new String[]{"recusar"});
-            openTradeTargetMenu(p);
+            if (name.equals("ACEITAR TROCA")) {
+                handleTradeCommand(p, new String[]{"aceitar"});
+            } else if (name.equals("RECUSAR TROCA")) {
+                handleTradeCommand(p, new String[]{"recusar"});
+                openTradeTargetMenu(p);
+            }
         } else if (title.equals(plain(CLAN_INVITES_MENU))) {
             if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else { clanCommand(p, new String[]{"aceitar"}); openClanMenu(p); } }
         } else if (title.equals(plain(BOUNTY_MENU))) {
