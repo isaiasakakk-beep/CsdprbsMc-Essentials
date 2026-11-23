@@ -98,10 +98,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String TRADE_REQUEST_MENU = "§6§lPEDIDOS DE TROCA";
     private static final String BANK_MENU = "§e§lBANCO";
     private static final String PROFILE_MENU = "§6§lMEU PERFIL";
+    private static final String TAG_ADMIN_MENU = "§6§lADMINISTRAR TAGS";
+    private static final String TAG_EDIT_MENU = "§e§lCONFIGURAR TAG DO JOGADOR";
     private static final String RANKINGS_MENU = "§e§lRANKINGS TOP 10";
     private static final String PAY_TARGET_MENU = "§6§lESCOLHA O JOGADOR";
     private static final String PAY_AMOUNT_MENU = "§6§lVALOR DA TRANSFERÊNCIA";
     private final Map<UUID, UUID> pendingPayTarget = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> selectedTagTarget = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, UUID>> tagAdminTargets = new ConcurrentHashMap<>();
     private static final String AUCTION_ITEM_MENU = "§e§lESCOLHA O ITEM";
     private static final String AUCTION_PRICE_MENU = "§e§lDEFINIR PREÇO";
     private record AuctionSelection(int sourceSlot, ItemStack item) {}
@@ -525,7 +529,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         event.getDrops().removeIf(this::isCompass);
     }
 
-    private String memberTag() { return "§6§l[§e§lMEMBRO§6§l]"; }
+    private String memberTag() {
+        return "§6§l[§e§lMEMBRO§6§l]";
+    }
 
     private void addReputation(Player player, int amount) {
         String path = "players." + id(player) + ".reputation";
@@ -589,19 +595,24 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private String playerTag(Player player) {
+        StringBuilder tags = new StringBuilder(memberTag());
         String custom = getConfig().getString("players." + id(player) + ".customTag");
-        String member = custom == null ? memberTag() : org.bukkit.ChatColor.translateAlternateColorCodes('&', custom);
+        if (custom != null && !custom.isBlank()) {
+            tags.append(" ").append(org.bukkit.ChatColor.translateAlternateColorCodes('&', custom)).append("§r");
+        }
         String clan = getConfig().getString("players." + id(player) + ".clan");
-        String clanTag = "";
         if (clan != null) {
-            String first = getConfig().getString("clans." + clan + ".color1", "§f");
-            String second = getConfig().getString("clans." + clan + ".color2", first);
+            String first = getConfig().getString("clans." + clan + ".color1", "§6");
+            String second = getConfig().getString("clans." + clan + ".color2", "§e");
             String upper = clan.toUpperCase(Locale.ROOT);
             StringBuilder styled = new StringBuilder(" §6§l[");
-            for (int i = 0; i < upper.length(); i++) styled.append("§l").append(i % 2 == 0 ? first : second).append(upper.charAt(i));
-            clanTag = styled.append("§6§l]").toString();
+            for (int i = 0; i < upper.length(); i++) {
+                String color = i % 2 == 0 ? first : second;
+                styled.append("§l").append(color).append(upper.charAt(i));
+            }
+            tags.append(styled).append("§6§l]");
         }
-        return member + clanTag;
+        return tags.toString();
     }
 
     private int rankOf(Player player, String stat) {
@@ -628,24 +639,45 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void updatePlayerTag(Player player) {
-        String prefix = playerTag(player), rank = rankingTag(player);
+        String prefix = playerTag(player);
+        String rank = rankingTag(player);
         tagCache.put(player.getUniqueId(), prefix + rank);
+
         Scoreboard board = Bukkit.getScoreboardManager().getMainScoreboard();
         String teamName = "csd" + player.getUniqueId().toString().replace("-", "").substring(0, 12);
         Team team = board.getTeam(teamName);
         if (team == null) team = board.registerNewTeam(teamName);
-        player.setScoreboard(board);
-        for (String entry : new HashSet<>(team.getEntries())) team.removeEntry(entry);
-        team.setPrefix(prefix.length() > 64 ? prefix.substring(0, 64) : prefix);
-        team.setSuffix(rank);
+
+        Team previous = board.getEntryTeam(player.getName());
+        if (previous != null && !previous.getName().equals(teamName)) previous.removeEntry(player.getName());
+        if (player.getScoreboard() != board) player.setScoreboard(board);
+
+        for (String entry : new HashSet<>(team.getEntries())) {
+            if (!entry.equals(player.getName())) team.removeEntry(entry);
+        }
+
+        team.prefix(LegacyComponentSerializer.legacySection().deserialize(prefix));
+        team.suffix(LegacyComponentSerializer.legacySection().deserialize(rank));
         team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.ALWAYS);
-        team.addEntry(player.getName());
+        if (!team.hasEntry(player.getName())) team.addEntry(player.getName());
+
         player.setCustomName(null);
         player.setCustomNameVisible(false);
+        player.setPlayerListName(prefix + " §f§l" + player.getName() + rank + "§r");
     }
 
     private void refreshPlayerTags() {
         for (Player online : Bukkit.getOnlinePlayers()) updatePlayerTag(online);
+    }
+
+    @EventHandler
+    public void refreshTagsAfterRespawn(PlayerRespawnEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> updatePlayerTag(event.getPlayer()));
+    }
+
+    @EventHandler
+    public void refreshTagsAfterWorldChange(PlayerChangedWorldEvent event) {
+        Bukkit.getScheduler().runTask(this, () -> updatePlayerTag(event.getPlayer()));
     }
 
     @EventHandler
@@ -683,6 +715,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(24, button(Material.EMERALD, "§f§e§lTROCAS"));
         inv.setItem(25, button(Material.BARREL, "§f§6§lBANCO"));
         inv.setItem(26, button(Material.PLAYER_HEAD, "§f§e§lMEU PERFIL"));
+        if (p.hasPermission("csdprbsmc.admin")) inv.setItem(31, button(Material.NAME_TAG, "§6§lADMINISTRAR TAGS"));
 
         p.openInventory(inv);
     }
@@ -728,7 +761,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         boolean managed = title.equals(plain(AUCTION_MENU)) || title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TRADE_REQUEST_MENU))
-                || title.equals(plain(BANK_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU)) || title.equals(plain(PAY_TARGET_MENU)) || title.equals(plain(PAY_AMOUNT_MENU))
+                || title.equals(plain(BANK_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU)) || title.equals(plain(PAY_TARGET_MENU)) || title.equals(plain(PAY_AMOUNT_MENU)) || title.equals(plain(TAG_ADMIN_MENU)) || title.equals(plain(TAG_EDIT_MENU))
                 || title.equals(plain(AUCTION_ITEM_MENU)) || title.equals(plain(AUCTION_PRICE_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
@@ -746,6 +779,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String name = plain(item.getItemMeta().getDisplayName());
 
         if (name.equals(plain(BACK_BUTTON))) {
+            if (title.equals(plain(TAG_ADMIN_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(TAG_EDIT_MENU))) { openTagAdminTargetMenu(p); return; }
             if (title.equals(plain(TRADE_MENU))) { cancelTrade(p, "Troca cancelada."); return; }
             if (title.equals(plain(TRADE_REQUEST_MENU))) { openTradeTargetMenu(p); return; }
             if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU)) || title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU))) { openMenu(p); return; }
@@ -787,6 +822,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "TROCAS" -> openTradeTargetMenu(p);
                 case "BANCO" -> openBankMenu(p);
                 case "MEU PERFIL" -> openProfileMenu(p);
+                case "ADMINISTRAR TAGS" -> { if (p.hasPermission("csdprbsmc.admin")) openTagAdminTargetMenu(p); else msg(p, "Você não tem permissão."); }
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
@@ -855,6 +891,30 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
+        } else if (title.equals(plain(TAG_ADMIN_MENU))) {
+            if (!p.hasPermission("csdprbsmc.admin")) { msg(p, "Você não tem permissão."); openMenu(p); return; }
+            UUID targetId = tagAdminTargets.getOrDefault(p.getUniqueId(), Map.of()).get(event.getSlot());
+            Player target = targetId == null ? null : Bukkit.getPlayer(targetId);
+            if (target != null) { selectedTagTarget.put(p.getUniqueId(), targetId); openTagAdminEditMenu(p, target); }
+        } else if (title.equals(plain(TAG_EDIT_MENU))) {
+            if (!p.hasPermission("csdprbsmc.admin")) { msg(p, "Você não tem permissão."); openMenu(p); return; }
+            UUID targetId = selectedTagTarget.get(p.getUniqueId());
+            Player target = targetId == null ? null : Bukkit.getPlayer(targetId);
+            if (target == null) { msg(p, "O jogador saiu do servidor."); openTagAdminTargetMenu(p); return; }
+            String customTag = switch (event.getSlot()) {
+                case 10 -> null;
+                case 12 -> "&6&l[&e&lVIP&6&l]";
+                case 14 -> "&6&l[&e&lAJUDANTE&6&l]";
+                case 16 -> "&6&l[&e&lMOD&6&l]";
+                case 18 -> "&6&l[&e&lADMIN&6&l]";
+                default -> "__INVALID__";
+            };
+            if (!"__INVALID__".equals(customTag)) {
+                getConfig().set("players." + id(target) + ".customTag", customTag);
+                saveConfig(); refreshPlayerTags();
+                msg(p, customTag == null ? "Tag personalizada removida de " + target.getName() + "." : "Tag de " + target.getName() + " atualizada.");
+                openTagAdminEditMenu(p, target);
+            }
         } else if (title.equals(plain(PROFILE_MENU)) || title.equals(plain(RANKINGS_MENU))) {
             // Perfil e rankings são somente leitura; o botão de voltar é tratado acima.
         } else if (title.equals(plain(PAY_TARGET_MENU))) {
@@ -1014,7 +1074,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(RANKINGS_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(CLAN_MANAGE_MENU) || title.equals(CLAN_MEMBER_ACTION_MENU) || title.equals(CLAN_DISSOLVE_MENU) || title.equals(CLAN_INFO_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TAG_ADMIN_MENU) || title.equals(TAG_EDIT_MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(RANKINGS_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(CLAN_MANAGE_MENU) || title.equals(CLAN_MEMBER_ACTION_MENU) || title.equals(CLAN_DISSOLVE_MENU) || title.equals(CLAN_INFO_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1573,6 +1633,37 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String clean = name.replaceFirst("^§.", "");
         ShopProduct product = findProduct(clean);
         if (product != null) buyProduct(p, product, 1);
+    }
+
+    private void openTagAdminTargetMenu(Player admin) {
+        if (!admin.hasPermission("csdprbsmc.admin")) { msg(admin, "Você não tem permissão."); return; }
+        Inventory inv = Bukkit.createInventory(null, 54, TAG_ADMIN_MENU);
+        Map<Integer, UUID> targets = new HashMap<>();
+        int slot = 0;
+        for (Player target : Bukkit.getOnlinePlayers().stream()
+                .filter(player -> !player.equals(admin))
+                .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList()) {
+            if (slot >= 45) break;
+            inv.setItem(slot, playerHead(target, "§e§l" + target.getName()));
+            targets.put(slot, target.getUniqueId());
+            slot++;
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        tagAdminTargets.put(admin.getUniqueId(), targets);
+        admin.openInventory(inv);
+    }
+
+    private void openTagAdminEditMenu(Player admin, Player target) {
+        if (!admin.hasPermission("csdprbsmc.admin")) { msg(admin, "Você não tem permissão."); return; }
+        Inventory inv = Bukkit.createInventory(null, 27, TAG_EDIT_MENU);
+        inv.setItem(4, playerHead(target, "§e§lJOGADOR: " + target.getName()));
+        inv.setItem(10, button(Material.NAME_TAG, "§e§lMEMBRO PADRÃO"));
+        inv.setItem(12, button(Material.GOLD_INGOT, "§6§lTAG VIP"));
+        inv.setItem(14, button(Material.IRON_HELMET, "§e§lTAG AJUDANTE"));
+        inv.setItem(16, button(Material.SHIELD, "§6§lTAG MOD"));
+        inv.setItem(18, button(Material.NETHER_STAR, "§e§lTAG ADMIN"));
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
+        admin.openInventory(inv);
     }
 
     private void openProfileMenu(Player p) {
