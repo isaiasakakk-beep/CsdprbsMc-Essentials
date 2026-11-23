@@ -1,14 +1,14 @@
 name: CsdprbsMcEssentials
-version: 1.2.0
+version: 1.5.0
 main: com.csdprbsmc.essentials.CsdprbsMcEssentials
 api-version: '26.3'
 author: CsdprbsMc
 description: Essentials para servidores semi-anarquia
-softdepend: [floodgate]
 
 commands:
   ess:
   tpa:
+  tpahere:
   tpaccept:
   tpdeny:
   sethome:
@@ -21,9 +21,19 @@ commands:
   bal:
   pay:
   shop:
+  missions:
+  procurados:
+  contratos:
+  tesouro:
   topmoney:
   topkills:
   setmoney:
+  tagadmin:
+  reputacao:
+  bank:
+  trade:
+  auction:
+  shopadmin:
 
 permissions:
   csdprbsmc.admin:
