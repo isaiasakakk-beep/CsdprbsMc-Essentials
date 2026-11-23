@@ -1033,8 +1033,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         p.openInventory(inv);
     }
 
-    private double shopPrice(ShopProduct product) { return getConfig().getDouble("shop.prices." + product.material().name(), shopPrice(product)); }
-    private boolean shopLimited(ShopProduct product) { return getConfig().getBoolean("shop.limited." + product.material().name(), shopLimited(product)); }
+    private double shopPrice(ShopProduct product) { return getConfig().getDouble("shop.prices." + product.material().name(), product.price()); }
+    private boolean shopLimited(ShopProduct product) { return getConfig().getBoolean("shop.limited." + product.material().name(), product.limited()); }
 
     private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equalsIgnoreCase(name)).findFirst().orElse(null);}
     private void openShopSearchResults(Player p, String query) {
@@ -1042,14 +1042,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String normalized = query.toLowerCase(Locale.ROOT);
         List<ShopProduct> matches = SHOP_PRODUCTS.stream().filter(product -> product.name().toLowerCase(Locale.ROOT).contains(normalized) || product.material().name().toLowerCase(Locale.ROOT).contains(normalized)).limit(45).toList();
         Inventory inv = Bukkit.createInventory(null, 54, SHOP_SEARCH_MENU);
-        for (int i=0;i<matches.size();i++) { ShopProduct product=matches.get(i); ItemStack item=new ItemStack(product.material()); ItemMeta meta=item.getItemMeta(); meta.setDisplayName("§f§l"+product.name()); meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique para comprar 1","§eShift + clique para comprar 16")); item.setItemMeta(meta); inv.setItem(i,item); }
+        for (int i=0;i<matches.size();i++) { ShopProduct product=matches.get(i); ItemStack item=new ItemStack(product.material()); ItemMeta meta=item.getItemMeta(); meta.setDisplayName("§f§l"+product.name()); meta.setLore(List.of("§7Preço: §a$"+shopPrice(product),"§eClique para comprar 1","§eShift + clique para comprar 16")); item.setItemMeta(meta); inv.setItem(i,item); }
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
         if (matches.isEmpty()) msg(p, "Nenhum item encontrado para: " + query);
     }
 
     private void buyProduct(Player p, ShopProduct product, int amount) {
         if (product == null || amount < 1) return;
-        if (product.limited()) amount = 1;
+        if (shopLimited(product)) amount = 1;
 
         int maxStack = product.material().getMaxStackSize();
         if (amount > maxStack) {
@@ -1057,7 +1057,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             return;
         }
 
-        double total = product.price() * amount;
+        double total = shopPrice(product) * amount;
         double balance = money(p);
         if (!Double.isFinite(total) || total <= 0 || balance < total) {
             msg(p, "Saldo insuficiente. Preço: $" + total);
@@ -1130,7 +1130,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             ItemStack original = stack.clone();
             ItemStack display = stack.clone();
             ItemMeta meta = display.getItemMeta();
-            meta.setLore(List.of("§7Quantidade: §f" + stack.getAmount(), "§7Valor total: §a$" + (Math.floor(product.price() * .5 * stack.getAmount() * 100) / 100), "§eClique para selecionar"));
+            meta.setLore(List.of("§7Quantidade: §f" + stack.getAmount(), "§7Valor total: §a$" + (Math.floor(shopPrice(product) * .5 * stack.getAmount() * 100) / 100), "§eClique para selecionar"));
             display.setItemMeta(meta);
             inv.setItem(slot, display);
             selections.put(slot, new SaleSelection(sourceSlot, original));
@@ -1162,7 +1162,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         pendingSale.put(p.getUniqueId(), chosen.clone());
         ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == chosen.getType()).findFirst().orElse(null);
         if (product == null) return;
-        double total = Math.floor(product.price() * .5 * chosen.getAmount() * 100) / 100;
+        double total = Math.floor(shopPrice(product) * .5 * chosen.getAmount() * 100) / 100;
         Inventory inv = Bukkit.createInventory(null, 27, SELL_CONFIRM);
         inv.setItem(11, button(Material.LIME_WOOL, "§a§lCONFIRMAR VENDA"));
         inv.setItem(13, chosen.clone());
@@ -1186,7 +1186,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (current.getAmount() <= 0) p.getInventory().setItem(sourceSlot, null);
         ShopProduct product = SHOP_PRODUCTS.stream().filter(x -> x.material() == selected.getType()).findFirst().orElse(null);
         if (product == null) return;
-        double total = Math.floor(product.price() * .5 * selected.getAmount() * 100) / 100;
+        double total = Math.floor(shopPrice(product) * .5 * selected.getAmount() * 100) / 100;
         addMoney(p, total);
         msg(p, "Você vendeu " + selected.getAmount() + "x " + product.name() + " por $" + total + ".");
         openSellSelection(p);
@@ -1199,7 +1199,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (item == null || item.getType().isAir()) continue;
             ShopProduct product = SHOP_PRODUCTS.stream().filter(entry -> entry.material() == item.getType()).findFirst().orElse(null);
             if (product == null) continue;
-            sold += item.getAmount(); total += product.price() * 0.5 * item.getAmount();
+            sold += item.getAmount(); total += shopPrice(product) * 0.5 * item.getAmount();
             p.getInventory().setItem(slot, null);
         }
         total = Math.floor(total * 100.0) / 100.0;
