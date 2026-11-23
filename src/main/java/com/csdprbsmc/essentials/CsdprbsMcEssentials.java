@@ -86,9 +86,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, TradeSession> tradeByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> tradeRequests = new ConcurrentHashMap<>();
     private final Map<UUID, Map<Integer, String>> auctionSlots = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, Integer>> auctionItemSlots = new ConcurrentHashMap<>();
+    private final Map<UUID, AuctionSelection> pendingAuction = new ConcurrentHashMap<>();
     private static final String TRADE_MENU = "§6§lTROCA SEGURA";
     private static final String AUCTION_MENU = "§e§lLEILÃO DOS JOGADORES";
     private static final String TRADE_TARGET_MENU = "§6§lESCOLHA QUEM TROCAR";
+    private static final String TRADE_REQUEST_MENU = "§6§lPEDIDOS DE TROCA";
+    private static final String BANK_MENU = "§e§lBANCO";
+    private static final String AUCTION_ITEM_MENU = "§e§lESCOLHA O ITEM";
+    private static final String AUCTION_PRICE_MENU = "§e§lDEFINIR PREÇO";
+    private record AuctionSelection(int sourceSlot, ItemStack item) {}
     private static final class TradeSession {
         final UUID a, b; final Map<UUID, List<ItemStack>> offers = new HashMap<>(); final Set<UUID> accepted = new HashSet<>();
         TradeSession(UUID a, UUID b) { this.a=a; this.b=b; offers.put(a,new ArrayList<>()); offers.put(b,new ArrayList<>()); }
@@ -687,6 +694,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(22, button(Material.RECOVERY_COMPASS, hasBack ? "§a§lBACK - VOLTAR AO LOCAL DA MORTE" : "§7§lBACK - SEM LOCAL DISPONÍVEL"));
         inv.setItem(23, button(Material.GOLD_INGOT, "§f§6§lLEILÃO"));
         inv.setItem(24, button(Material.EMERALD, "§f§e§lTROCAS"));
+        inv.setItem(25, button(Material.BARREL, "§f§6§lBANCO"));
 
         p.openInventory(inv);
     }
@@ -731,7 +739,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
         boolean managed = title.equals(plain(AUCTION_MENU)) || title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
-                || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TPA_MENU))
+                || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TRADE_REQUEST_MENU))
+                || title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_ITEM_MENU)) || title.equals(plain(AUCTION_PRICE_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
@@ -748,7 +757,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
 
         if (name.equals(plain(BACK_BUTTON))) {
             if (title.equals(plain(TRADE_MENU))) { cancelTrade(p, "Troca cancelada."); return; }
-            if (title.equals(plain(AUCTION_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(TRADE_REQUEST_MENU))) { openTradeTargetMenu(p); return; }
+            if (title.equals(plain(BANK_MENU)) || title.equals(plain(AUCTION_MENU))) { openMenu(p); return; }
+            if (title.equals(plain(AUCTION_ITEM_MENU))) { openAuction(p); return; }
+            if (title.equals(plain(AUCTION_PRICE_MENU))) { openAuctionItemMenu(p); return; }
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
             else if (title.equals(plain(SHOP_SEARCH_MENU))) openShop(p);
@@ -778,6 +790,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "TESOUROS" -> openTreasureMenu(p);
                 case "LEILÃO" -> openAuction(p);
                 case "TROCAS" -> openTradeTargetMenu(p);
+                case "BANCO" -> openBankMenu(p);
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
@@ -846,8 +859,19 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
+        } else if (title.equals(plain(BANK_MENU))) {
+            if (name.startsWith("DEPOSITAR: ")) {
+                String amountText = name.substring("DEPOSITAR: ".length());
+                double amount = amountText.equals("TUDO") ? money(p) : Double.parseDouble(amountText);
+                transferBank(p, true, amount); openBankMenu(p);
+            } else if (name.startsWith("SACAR: ")) {
+                String amountText = name.substring("SACAR: ".length());
+                double amount = amountText.equals("TUDO") ? getConfig().getDouble("players." + id(p) + ".bank") : Double.parseDouble(amountText);
+                transferBank(p, false, amount); openBankMenu(p);
+            }
         } else if (title.equals(plain(TRADE_TARGET_MENU))) {
-            if (name.startsWith("JOGADOR: ")) handleTradeCommand(p, new String[]{name.substring(9)});
+            if (name.equals("PEDIDOS RECEBIDOS")) openTradeRequestsMenu(p);
+            else if (name.startsWith("JOGADOR: ")) handleTradeCommand(p, new String[]{name.substring(9)});
         } else if (title.equals(plain(SHOP_SEARCH_MENU))) {
             ShopProduct product = findProduct(name); if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(plain(SHOP_CATEGORIES))) {
@@ -877,6 +901,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (!clan.isBlank()) applyToClan(p, clan);
         } else if (title.equals(plain(CLAN_REQUESTS_MENU))) {
             if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
+        } else if (title.equals(plain(TRADE_REQUEST_MENU))) {
+            if (name.equals("ACEITAR TROCA")) handleTradeCommand(p, new String[]{"aceitar"});
+            else if (name.equals("RECUSAR TROCA")) handleTradeCommand(p, new String[]{"recusar"});
+            openTradeTargetMenu(p);
         } else if (title.equals(plain(CLAN_INVITES_MENU))) {
             if (name.startsWith("CONVITE: ")) { if (event.isRightClick()) { getConfig().set("clan-invites." + id(p), null); saveConfig(); msg(p, "Convite recusado."); openClanInvitesMenu(p); } else { clanCommand(p, new String[]{"aceitar"}); openClanMenu(p); } }
         } else if (title.equals(plain(BOUNTY_MENU))) {
@@ -1374,6 +1402,38 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (product != null) buyProduct(p, product, 1);
     }
 
+    private void openBankMenu(Player p) {
+        String path = "players." + id(p) + ".bank";
+        Inventory inv = Bukkit.createInventory(null, 54, BANK_MENU);
+        inv.setItem(4, button(Material.BARREL, "§6§lSALDO DO BANCO: §a$" + getConfig().getDouble(path)));
+        inv.setItem(22, button(Material.GOLD_INGOT, "§e§lCARTEIRA: §a$" + money(p)));
+        double[] values = {10, 50, 100, 500, 1000};
+        int[] deposits = {10, 11, 12, 13, 14}, withdrawals = {28, 29, 30, 31, 32};
+        for (int i=0;i<values.length;i++) {
+            inv.setItem(deposits[i], button(Material.LIME_DYE, "§aDEPOSITAR: " + (long)values[i]));
+            inv.setItem(withdrawals[i], button(Material.YELLOW_DYE, "§eSACAR: " + (long)values[i]));
+        }
+        inv.setItem(16, button(Material.EMERALD_BLOCK, "§a§lDEPOSITAR: TUDO"));
+        inv.setItem(34, button(Material.GOLD_BLOCK, "§e§lSACAR: TUDO"));
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void transferBank(Player p, boolean deposit, double amount) {
+        if (!Double.isFinite(amount) || amount <= 0) { msg(p, "Valor inválido."); return; }
+        String path = "players." + id(p) + ".bank";
+        double bank = getConfig().getDouble(path);
+        if (deposit) {
+            if (money(p) + 0.000001 < amount) { msg(p, "Saldo da carteira insuficiente."); return; }
+            money(p, money(p) - amount); getConfig().set(path, bank + amount);
+        } else {
+            if (bank + 0.000001 < amount) { msg(p, "Saldo bancário insuficiente."); return; }
+            getConfig().set(path, bank - amount); addMoney(p, amount);
+        }
+        saveConfig();
+        msg(p, deposit ? "§aDepósito realizado: $" + amount : "§aSaque realizado: $" + amount);
+    }
+
     private void handleBankCommand(Player p, String[] args) {
         String path = "players." + id(p) + ".bank";
         if (args.length == 0) { msg(p, "Saldo em banco: §a$" + getConfig().getDouble(path) + " §f| Use /bank depositar <valor> ou /bank sacar <valor>."); return; }
@@ -1403,8 +1463,29 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§7Clique para enviar uma solicitação de troca.")); head.setItemMeta(meta);
             inv.setItem(slot++, head);
         }
+        inv.setItem(45, button(Material.WRITABLE_BOOK, "§e§lPEDIDOS RECEBIDOS"));
         inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
         if (slot == 0) msg(p, "Não há jogadores disponíveis para trocar agora.");
+        p.openInventory(inv);
+    }
+
+    private void openTradeRequestsMenu(Player p) {
+        UUID requesterId = tradeRequests.get(p.getUniqueId());
+        Player requester = requesterId == null ? null : Bukkit.getPlayer(requesterId);
+        Inventory inv = Bukkit.createInventory(null, 27, TRADE_REQUEST_MENU);
+        if (requester != null) {
+            ItemStack head = playerHead(requester, "§ePEDIDO DE: " + requester.getName());
+            ItemMeta meta = head.getItemMeta();
+            meta.setLore(List.of("§7Esse jogador quer negociar itens com você."));
+            head.setItemMeta(meta);
+            inv.setItem(13, head);
+            inv.setItem(11, button(Material.LIME_WOOL, "§a§lACEITAR TROCA"));
+            inv.setItem(15, button(Material.RED_WOOL, "§c§lRECUSAR TROCA"));
+        } else {
+            tradeRequests.remove(p.getUniqueId());
+            inv.setItem(13, button(Material.BARRIER, "§cNENHUM PEDIDO PENDENTE"));
+        }
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
 
@@ -1424,7 +1505,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             Player target = Bukkit.getPlayerExact(args[0]);
             if (target == null || target.equals(p) || tradeByPlayer.containsKey(p.getUniqueId()) || tradeByPlayer.containsKey(target.getUniqueId()) || inCombat(p) || inCombat(target)) { msg(p, "Jogador indisponível para troca."); return; }
             tradeRequests.put(target.getUniqueId(), p.getUniqueId()); msg(p, "Solicitação enviada para " + target.getName() + ".");
-            msg(target, p.getName() + " quer trocar itens com você. Use /trade aceitar ou /trade recusar.");
+            msg(target, p.getName() + " quer trocar itens com você. Abra a bússola > Trocas > Pedidos recebidos.");
         }
     }
 
