@@ -1,50 +1,39 @@
 # CsdprbsMc Essentials 1.5.0
 
 ## Interface
-Java and Bedrock players use the same inventory-based menus. The previous Floodgate/Cumulus form prototype was removed.
+Java and Bedrock players use the same inventory-based menus opened by the Recovery Compass. The Floodgate/Cumulus form prototype was discarded.
+
+## Player features through the compass
+- Main menu: TPA, homes, warps, clans, rankings, shop/economy, missions, wanted players, contracts, treasures, BACK, marketplace, trades, bank and profile.
+- TPA: select an online player, choose the direction, and accept or decline incoming requests in the menu.
+- Homes: create up to five automatic homes, teleport, update the saved location or delete one.
+- Clans: create from the compass (the name is generated from the player's username), browse clans, apply to join, accept invitations, invite online players, see applications and clan details, leave, and customize the two-color name gradient as leader.
+- Clan leader management: view members, transfer leadership, expel a member, and dissolve the clan with confirmation.
+- Shop: browse categories or the full alphabetical catalog, buy one or 16 items, select inventory items to sell, choose a quantity and confirm, or use sell-all.
+- Wanted players: select a target and set a bounty using preset values.
+- Missions: claim completed standard, weekly and specific missions from their menus.
+- Player marketplace: browse listings, announce an inventory stack at a preset price, buy other players' listings, or click one's own listing to cancel and return the item.
+- Trades: choose a player, view incoming requests, accept or decline, manage offers in the trade inventory, and require both players to accept the final offer.
+- Bank and profile: view wallet/bank/reputation/kills, deposit and withdraw preset amounts or all available funds, and transfer preset amounts or all wallet funds to an online player.
 
 ## PvP and CombatLog
 - Combat lasts 15 seconds after the most recent player hit.
-- The plugin warns both players and displays a countdown.
-- The main compass menu, TPA, BACK, HOME, WARPS, plugin/command teleports, Ender Pearls and Chorus Fruit teleports are blocked while tagged.
-- Logging out during combat drops the player's carried items. If the opponent is online, the opponent receives the logout kill, reputation, and all money from the logged-out player's wallet and bank.
+- Both players receive a warning and countdown.
+- The compass, TPA, BACK, HOME, WARPS, plugin/command teleports, Ender Pearls and Chorus Fruit teleports are blocked while tagged.
+- Logging out during combat causes a CombatLog defeat and item drop; the online opponent receives the logout kill, reputation and the defeated player's wallet and bank money.
 
 ## Economy
-- The compass main menu opens the bank directly.
-- Bank deposits and withdrawals are available through preset-amount buttons and all available funds; no player command is needed.
-- The bank screen shows wallet and bank balances.
-- `/bal` and `/bank` remain optional shortcuts.
-- `/pay <player> <amount>` remains an optional shortcut for player-to-player wallet transfers.
-- `/shop`: item shop, including name/material search, inventory selling and sell-all.
-- `/shopadmin preco <MATERIAL> <amount>`: set a shop purchase/sale base price.
-- `/shopadmin limite <MATERIAL> <true|false>`: set whether an item is limited to one per purchase.
-- The compass opens the player marketplace.
-- The marketplace has an **ANUNCIAR ITEM** button, then lets the player select an inventory stack and choose a preset price.
-- Clicking one of the seller's own listings cancels it and returns the item.
-- `/auction` and its subcommands remain optional shortcuts.
+- Killing another player transfers the victim's wallet and bank money to the killer and sets both victim balances to zero.
+- Kills increase reputation by one and deaths decrease it by one.
+- /bal, /bank, /pay, /auction and /trade remain optional command shortcuts.
+- /shopadmin preco MATERIAL amount and /shopadmin limite MATERIAL true|false remain administrative shop configuration commands.
 
-When a player kills another player, the killer takes all money from the victim's wallet and bank. Both balances become zero. Kills increase reputation by one and deaths decrease it by one.
+## Tags
+- Default member tag uses bold gold/orange and yellow.
+- Clan gradient and ranking tags are bold.
+- /tagadmin player tag... and /tagadmin player reset are administrative shortcuts requiring csdprbsmc.admin.
 
-
-- The compass **Meu Perfil** screen shows wallet, bank, reputation and kills.
-- Money transfers are available from **Banco > Transferir dinheiro**, by choosing an online player and a preset amount or all wallet funds.
-
-## Player trades
-- The compass opens the player list for starting a trade.
-- Incoming requests are shown in **Trocas > Pedidos recebidos**, with accept and decline buttons.
-- `/trade` subcommands remain optional shortcuts.
-- In the trade inventory, click items in your own inventory to add them to your offer; click your offered items to take them back.
-- Both players must accept the final offer.
-- Changing an offer resets both acceptances.
-- `PEDIR MAIS` notifies the other player and resets acceptance.
-- Closing the trade or disconnecting cancels it and returns the offered items.
-
-## Reputation and tags
-- `/reputacao`: view reputation.
-- Default member tag is bold gold/orange and yellow. Clan gradient letters and ranking tags are bold.
-- `/tagadmin <player> <tag...>`: set a custom player tag. Use ampersand color codes, for example `&6&l[VIP]`.
-- `/tagadmin <player> reset`: restore the default member tag.
-- Tag configuration requires `csdprbsmc.admin`.
-
-## Clans
-The existing clan system remains: maximum 8 members, leader-controlled invitations and applications, join/leave, kick, transfer leadership, disband, clan information, and leader-only two-color letter gradient customization.
+## Build and testing status
+- A previous code revision compiled successfully in GitHub Actions (run #90).
+- The latest compass UI additions were pushed after that successful run and still need a fresh build check.
+- No claim of successful Paper/Geyser gameplay testing is made yet. The inventory menus, economy transactions, trade/marketplace edge cases and Java/Bedrock interaction still need testing on a live test server.
