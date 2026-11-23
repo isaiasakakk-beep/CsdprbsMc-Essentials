@@ -46,6 +46,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Map<Integer, SaleSelection>> saleMenuSelections = new HashMap<>();
     private final Map<UUID, String> pendingClanApplication = new HashMap<>();
     private final Map<UUID, String> pendingBountyTarget = new ConcurrentHashMap<>();
+    private final Map<UUID, String> selectedClanMember = new HashMap<>();
     private final Map<UUID, String> pendingClanColorPart = new HashMap<>();
     private static final String SELL_SELECT = "§8§lSELECIONE O ITEM PARA VENDER";
     private static final String SELL_CONFIRM = "§8§lCONFIRMAR VENDA";
@@ -57,6 +58,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String CLAN_INVITE_MENU = "§8§lCONVIDAR JOGADORES";
     private static final String CLAN_BROWSER_MENU = "§8§lCLANS DISPONÍVEIS";
     private static final String CLAN_REQUESTS_MENU = "§8§lSOLICITAÇÕES DE CLAN";
+    private static final String CLAN_MANAGE_MENU = "§8§lGERENCIAR CLAN";
+    private static final String CLAN_MEMBER_ACTION_MENU = "§8§lAÇÕES DO MEMBRO";
+    private static final String CLAN_DISSOLVE_MENU = "§4§lDISSOLVER CLAN?";
+    private static final String CLAN_INFO_MENU = "§8§lINFORMAÇÕES DO CLAN";
     private static final String CLAN_INVITES_MENU = "§8§lCONVITES DE CLAN";
     private static final String BOUNTY_MENU = "§8§lJOGADORES PROCURADOS";
     private static final String BOUNTY_TARGET_MENU = "§8§lESCOLHA O ALVO";
@@ -396,6 +401,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         shopPages.remove(leaving);
         pendingClanApplication.remove(leaving);
         pendingBountyTarget.remove(leaving);
+        selectedClanMember.remove(leaving);
         pendingClanColorPart.remove(leaving);
         event.getPlayer().setCustomName(null);
         event.getPlayer().setCustomNameVisible(false);
@@ -726,7 +732,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
-                || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))
+                || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU)) || title.equals(plain(CLAN_MANAGE_MENU))
+                || title.equals(plain(CLAN_MEMBER_ACTION_MENU)) || title.equals(plain(CLAN_DISSOLVE_MENU)) || title.equals(plain(CLAN_INFO_MENU))
                 || title.equals(plain(BOUNTY_MENU)) || title.equals(plain(BOUNTY_TARGET_MENU)) || title.equals(plain(BOUNTY_AMOUNT_MENU)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU)) || title.equals(plain(SHOP))
                 || title.equals(plain(SHOP_CATEGORIES))
                 || title.startsWith(plain(SHOP_CATEGORY_PREFIX));
@@ -749,12 +756,15 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
             else if (title.equals(plain(BOUNTY_AMOUNT_MENU))) openBountyTargetMenu(p);
             else if (title.equals(plain(SHOP_SEARCH_MENU))) openShop(p);
-            else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
+            else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU)) || title.equals(plain(CLAN_MANAGE_MENU))
+                || title.equals(plain(CLAN_MEMBER_ACTION_MENU)) || title.equals(plain(CLAN_DISSOLVE_MENU)) || title.equals(plain(CLAN_INFO_MENU))) openClanMenu(p);
             else if (title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))) openMissions(p);
             else if (title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(CONTRACT_MENU)) || title.equals(plain(TREASURE_MENU))) openMenu(p);
             else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) openShop(p);
             else if (title.equals(plain(HOME_ACTION_MENU))) openHomeMenu(p);
             else if (title.equals(plain(TPA_REQUEST_MENU))) openTpaMenu(p);
+            else if (title.equals(plain(CLAN_MANAGE_MENU)) || title.equals(plain(CLAN_INFO_MENU))) openClanMenu(p);
+            else if (title.equals(plain(CLAN_MEMBER_ACTION_MENU)) || title.equals(plain(CLAN_DISSOLVE_MENU))) openClanManageMenu(p);
             else openMenu(p);
             return;
         }
@@ -912,6 +922,39 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             if (!clan.isBlank()) applyToClan(p, clan);
         } else if (title.equals(plain(CLAN_REQUESTS_MENU))) {
             if (name.startsWith("SOLICITANTE: ")) { String applicant = name.substring(13); handleClanApplication(p, applicant, event.isRightClick()); }
+        } else if (title.equals(plain(CLAN_MANAGE_MENU))) {
+            if (name.equals("DISSOLVER CLAN")) openClanDissolveMenu(p);
+            else if (name.startsWith("MEMBRO: ")) { selectedClanMember.put(p.getUniqueId(), name.substring(8)); openClanMemberActionMenu(p); }
+        } else if (title.equals(plain(CLAN_MEMBER_ACTION_MENU))) {
+            String memberId = selectedClanMember.get(p.getUniqueId());
+            String clan = getConfig().getString("players." + id(p) + ".clan");
+            if (memberId == null || clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Ação indisponível."); openClanMenu(p); return; }
+            if (name.equals("TRANSFERIR LIDERANÇA")) {
+                List<String> members = getConfig().getStringList("clans." + clan + ".members");
+                if (!members.contains(memberId)) { msg(p, "Esse membro não está mais no clan."); openClanManageMenu(p); return; }
+                getConfig().set("clans." + clan + ".leader", memberId); saveConfig(); refreshPlayerTags();
+                Player target = null; try { target = Bukkit.getPlayer(UUID.fromString(memberId)); } catch (Exception ignored) { }
+                msg(p, "Liderança transferida."); if (target != null) msg(target, "Você agora é líder do clan.");
+                selectedClanMember.remove(p.getUniqueId()); openClanMenu(p);
+            } else if (name.equals("EXPULSAR MEMBRO")) {
+                List<String> members = getConfig().getStringList("clans." + clan + ".members");
+                if (!members.remove(memberId)) { msg(p, "Esse membro não está mais no clan."); openClanManageMenu(p); return; }
+                getConfig().set("clans." + clan + ".members", members); getConfig().set("players." + memberId + ".clan", null);
+                saveConfig(); refreshPlayerTags();
+                Player target = null; try { target = Bukkit.getPlayer(UUID.fromString(memberId)); } catch (Exception ignored) { }
+                if (target != null) msg(target, "Você foi removido do clan " + clan + ".");
+                msg(p, "Membro removido do clan."); selectedClanMember.remove(p.getUniqueId()); openClanManageMenu(p);
+            }
+        } else if (title.equals(plain(CLAN_DISSOLVE_MENU))) {
+            if (name.equals("CONFIRMAR DISSOLUÇÃO")) {
+                String clan = getConfig().getString("players." + id(p) + ".clan");
+                if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder pode dissolver o clan."); openClanMenu(p); return; }
+                for (String member : getConfig().getStringList("clans." + clan + ".members")) getConfig().set("players." + member + ".clan", null);
+                getConfig().set("clans." + clan, null); getConfig().set("clan-applications." + clan, null);
+                saveConfig(); refreshPlayerTags(); msg(p, "Clan dissolvido."); openMenu(p);
+            }
+        } else if (title.equals(plain(CLAN_INFO_MENU))) {
+            // Informações somente leitura.
         } else if (title.equals(plain(TRADE_REQUEST_MENU))) {
             if (name.equals("ACEITAR TROCA")) {
                 handleTradeCommand(p, new String[]{"aceitar"});
@@ -962,7 +1005,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder do clan pode personalizar as cores."); openClanMenu(p); return; }
                 pendingClanColorPart.put(p.getUniqueId(), "color1"); openClanColorMenu(p);
             } else if (name.equals("ACEITAR CONVITE")) openClanInvitesMenu(p);
-            else if (name.equals("INFORMAÇÕES DO CLAN")) clanCommand(p, new String[]{"info"});
+            else if (name.equals("INFORMAÇÕES DO CLAN")) openClanInfoMenu(p);
+            else if (name.equals("GERENCIAR CLAN")) openClanManageMenu(p);
             else if (name.equals("SAIR DO CLAN")) clanCommand(p, new String[]{"sair"});
         }
     }
@@ -970,7 +1014,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(PROFILE_MENU) || title.equals(PAY_TARGET_MENU) || title.equals(PAY_AMOUNT_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(CLAN_MANAGE_MENU) || title.equals(CLAN_MEMBER_ACTION_MENU) || title.equals(CLAN_DISSOLVE_MENU) || title.equals(CLAN_INFO_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(BOUNTY_AMOUNT_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1340,6 +1384,68 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         openClanMenu(p);
     }
 
+    private void openClanManageMenu(Player p) {
+        String clan = getConfig().getString("players." + id(p) + ".clan");
+        if (clan == null || !id(p).equals(getConfig().getString("clans." + clan + ".leader"))) { msg(p, "Somente o líder pode gerenciar o clan."); openClanMenu(p); return; }
+        Inventory inv = Bukkit.createInventory(null, 54, CLAN_MANAGE_MENU);
+        int slot = 0;
+        for (String member : getConfig().getStringList("clans." + clan + ".members")) {
+            if (member.equals(id(p)) || slot >= 45) continue;
+            try {
+                UUID uuid = UUID.fromString(member);
+                String memberName = getConfig().getString("players." + member + ".name", Bukkit.getOfflinePlayer(uuid).getName());
+                ItemStack head = offlineHead(uuid, "§eMEMBRO: " + member);
+                ItemMeta meta = head.getItemMeta();
+                meta.setLore(List.of("§7Jogador: §f" + (memberName == null ? "Desconhecido" : memberName), "§aClique para gerenciar"));
+                head.setItemMeta(meta); inv.setItem(slot++, head);
+            } catch (Exception ignored) { }
+        }
+        inv.setItem(51, button(Material.TNT, "§c§lDISSOLVER CLAN"));
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void openClanMemberActionMenu(Player p) {
+        String member = selectedClanMember.get(p.getUniqueId());
+        Inventory inv = Bukkit.createInventory(null, 27, CLAN_MEMBER_ACTION_MENU);
+        if (member != null) {
+            UUID uuid = null; try { uuid = UUID.fromString(member); } catch (Exception ignored) { }
+            if (uuid != null) inv.setItem(13, offlineHead(uuid, "§eMEMBRO SELECIONADO"));
+            inv.setItem(11, button(Material.GOLDEN_HELMET, "§e§lTRANSFERIR LIDERANÇA"));
+            inv.setItem(15, button(Material.RED_WOOL, "§c§lEXPULSAR MEMBRO"));
+        }
+        inv.setItem(22, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void openClanDissolveMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, CLAN_DISSOLVE_MENU);
+        inv.setItem(11, button(Material.RED_WOOL, "§c§lCONFIRMAR DISSOLUÇÃO"));
+        inv.setItem(15, button(Material.LIME_WOOL, "§a§lCANCELAR"));
+        p.openInventory(inv);
+    }
+
+    private void openClanInfoMenu(Player p) {
+        String clan = getConfig().getString("players." + id(p) + ".clan");
+        if (clan == null || !getConfig().contains("clans." + clan)) { msg(p, "Você não está em um clan."); openClanMenu(p); return; }
+        Inventory inv = Bukkit.createInventory(null, 54, CLAN_INFO_MENU);
+        String leader = getConfig().getString("clans." + clan + ".leader");
+        inv.setItem(4, button(Material.NAME_TAG, "§e§lCLAN: " + clan));
+        try {
+            UUID leaderId = UUID.fromString(leader);
+            String leaderName = getConfig().getString("players." + leader + ".name", Bukkit.getOfflinePlayer(leaderId).getName());
+            inv.setItem(13, offlineHead(leaderId, "§6LÍDER: " + (leaderName == null ? "Desconhecido" : leaderName)));
+        } catch (Exception ignored) { }
+        int slot = 27;
+        for (String member : getConfig().getStringList("clans." + clan + ".members")) {
+            if (slot >= 45) break;
+            try {
+                UUID uuid = UUID.fromString(member);
+                String memberName = getConfig().getString("players." + member + ".name", Bukkit.getOfflinePlayer(uuid).getName());
+                inv.setItem(slot++, offlineHead(uuid, "§f" + (memberName == null ? "Desconhecido" : memberName)));
+            } catch (Exception ignored) { }
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+    }
+
     private void openClanMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, CLANS);
         String ownClan = getConfig().getString("players." + id(p) + ".clan");
@@ -1350,7 +1456,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         inv.setItem(14, button(Material.PAINTING, "§e§lPERSONALIZAR CORES"));
         inv.setItem(15, button(Material.BOOK, "§e§lINFORMAÇÕES DO CLAN"));
         inv.setItem(16, button(Material.OAK_DOOR, "§c§lSAIR DO CLAN"));
-        if (ownClan != null && id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) inv.setItem(21, button(Material.WRITABLE_BOOK, "§6§lSOLICITAÇÕES"));
+        if (ownClan != null && id(p).equals(getConfig().getString("clans." + ownClan + ".leader"))) {
+            inv.setItem(20, button(Material.CHEST, "§6§lGERENCIAR CLAN"));
+            inv.setItem(21, button(Material.WRITABLE_BOOK, "§6§lSOLICITAÇÕES"));
+        }
         inv.setItem(22, button(Material.BARRIER, BACK_BUTTON));
         p.openInventory(inv);
     }
