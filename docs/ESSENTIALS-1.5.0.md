@@ -7,7 +7,7 @@ Java and Bedrock players use the same inventory-based menus. The previous Floodg
 - Combat lasts 15 seconds after the most recent player hit.
 - The plugin warns both players and displays a countdown.
 - The main compass menu, TPA, BACK, HOME, WARPS, plugin/command teleports, Ender Pearls and Chorus Fruit teleports are blocked while tagged.
-- Logging out during combat drops the player's carried items. If the opponent is online, the opponent receives the logout kill, reputation and the logged-out player's wallet balance.
+- Logging out during combat drops the player's carried items. If the opponent is online, the opponent receives the logout kill, reputation, and all money from the logged-out player's wallet and bank.
 
 ## Economy
 - `/bal`: wallet and reputation.
@@ -20,7 +20,7 @@ Java and Bedrock players use the same inventory-based menus. The previous Floodg
 - `/auction vender <price>`: list the item in the main hand.
 - `/auction cancelar <id-prefix>`: cancel one of your own listings.
 
-When a player kills another player, the killer takes the victim's entire wallet balance. The victim's wallet becomes zero. Kills increase reputation by one and deaths decrease it by one.
+When a player kills another player, the killer takes all money from the victim's wallet and bank. Both balances become zero. Kills increase reputation by one and deaths decrease it by one.
 
 ## Player trades
 - `/trade <player>`: send a trade request.
