@@ -2448,7 +2448,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private double moneyById(String playerId) {
-        return getConfig().getDouble("players." + playerId + ".money");
+        return getConfig().getDouble("players." + playerId + ".money", 100);
     }
 
     private void showTop(Player p, String type) {
