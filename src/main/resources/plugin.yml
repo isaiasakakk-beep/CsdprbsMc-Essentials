@@ -4,7 +4,6 @@ main: com.csdprbsmc.essentials.CsdprbsMcEssentials
 api-version: '26.3'
 author: CsdprbsMc
 description: Essentials para servidores semi-anarquia
-softdepend: [floodgate]
 
 commands:
   ess:
@@ -29,6 +28,8 @@ commands:
   topmoney:
   topkills:
   setmoney:
+  tagadmin:
+  reputacao:
 
 permissions:
   csdprbsmc.admin:
