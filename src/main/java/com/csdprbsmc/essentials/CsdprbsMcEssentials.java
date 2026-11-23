@@ -88,6 +88,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Map<Integer, String>> auctionSlots = new ConcurrentHashMap<>();
     private static final String TRADE_MENU = "§6§lTROCA SEGURA";
     private static final String AUCTION_MENU = "§e§lLEILÃO DOS JOGADORES";
+    private static final String TRADE_TARGET_MENU = "§6§lESCOLHA QUEM TROCAR";
     private static final class TradeSession {
         final UUID a, b; final Map<UUID, List<ItemStack>> offers = new HashMap<>(); final Set<UUID> accepted = new HashSet<>();
         TradeSession(UUID a, UUID b) { this.a=a; this.b=b; offers.put(a,new ArrayList<>()); offers.put(b,new ArrayList<>()); }
@@ -672,6 +673,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String backPath = "death-back." + id(p);
         boolean hasBack = getConfig().contains(backPath + ".world") && getConfig().getLong(backPath + ".time") > System.currentTimeMillis() - 30L * 60 * 1000;
         inv.setItem(22, button(Material.RECOVERY_COMPASS, hasBack ? "§a§lBACK - VOLTAR AO LOCAL DA MORTE" : "§7§lBACK - SEM LOCAL DISPONÍVEL"));
+        inv.setItem(23, button(Material.GOLD_INGOT, "§f§6§lLEILÃO"));
+        inv.setItem(24, button(Material.EMERALD, "§f§e§lTROCAS"));
 
         p.openInventory(inv);
     }
@@ -716,7 +719,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
         boolean managed = title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
-                || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
+                || title.equals(plain(MENU)) || title.equals(plain(TRADE_TARGET_MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
                 || title.equals(plain(HOME_ACTION_MENU)) || title.equals(plain(WARP_MENU))
                 || title.equals(plain(CLANS)) || title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU))
@@ -761,6 +764,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 case "PROCURADOS" -> openBountyMenu(p);
                 case "CONTRATOS" -> openContractMenu(p);
                 case "TESOUROS" -> openTreasureMenu(p);
+                case "LEILÃO" -> openAuction(p);
+                case "TROCAS" -> openTradeTargetMenu(p);
                 default -> { }
             }
         } else if (title.equals(plain(SELL_SELECT))) {
@@ -829,6 +834,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
+        } else if (title.equals(plain(TRADE_TARGET_MENU))) {
+            if (name.startsWith("JOGADOR: ")) handleTradeCommand(p, new String[]{name.substring(9)});
         } else if (title.equals(plain(SHOP_SEARCH_MENU))) {
             ShopProduct product = findProduct(name); if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(plain(SHOP_CATEGORIES))) {
@@ -892,7 +899,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1369,6 +1376,21 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             } else { msg(p, "Use depositar ou sacar."); return; }
             saveConfig(); msg(p, "Operação concluída. Banco: §a$" + getConfig().getDouble(path));
         } catch (NumberFormatException ex) { msg(p, "Valor inválido."); }
+    }
+
+    private void openTradeTargetMenu(Player p) {
+        if (inCombat(p)) { msg(p, "§cVocê não pode iniciar uma troca durante o combate."); return; }
+        Inventory inv = Bukkit.createInventory(null, 54, TRADE_TARGET_MENU);
+        int slot = 0;
+        for (Player target : Bukkit.getOnlinePlayers().stream().filter(other -> !other.equals(p) && !inCombat(other)).sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER)).toList()) {
+            if (slot >= 45) break;
+            ItemStack head = playerHead(target, "§eJOGADOR: " + target.getName());
+            ItemMeta meta = head.getItemMeta(); meta.setLore(List.of("§7Clique para enviar uma solicitação de troca.")); head.setItemMeta(meta);
+            inv.setItem(slot++, head);
+        }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON));
+        if (slot == 0) msg(p, "Não há jogadores disponíveis para trocar agora.");
+        p.openInventory(inv);
     }
 
     private void handleTradeCommand(Player p, String[] args) {
