@@ -83,6 +83,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private final Map<UUID, Long> combatUntil = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> combatOpponent = new ConcurrentHashMap<>();
     private final Map<UUID, String> pendingShopSearch = new ConcurrentHashMap<>();
+    private final Map<UUID, TradeSession> tradeByPlayer = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> tradeRequests = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, String>> auctionSlots = new ConcurrentHashMap<>();
+    private static final String TRADE_MENU = "§6§lTROCA SEGURA";
+    private static final String AUCTION_MENU = "§e§lLEILÃO DOS JOGADORES";
+    private static final class TradeSession {
+        final UUID a, b; final Map<UUID, List<ItemStack>> offers = new HashMap<>(); final Set<UUID> accepted = new HashSet<>();
+        TradeSession(UUID a, UUID b) { this.a=a; this.b=b; offers.put(a,new ArrayList<>()); offers.put(b,new ArrayList<>()); }
+        UUID other(UUID id) { return id.equals(a) ? b : a; }
+    }
     private static final String SHOP_SEARCH_MENU = "§e§lPESQUISA DA LOJA";
     private static final String BACK_BUTTON = "§c§lVOLTAR";
     private record ShopProduct(Material material, String name, double price, String category, boolean limited) {}
@@ -253,7 +263,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 "sethome", "home", "delhome",
                 "setwarp", "warp", "delwarp",
                 "clan", "bal", "pay", "shop",
-                "topmoney", "topkills", "setmoney", "tagadmin", "reputacao"
+                "topmoney", "topkills", "setmoney", "tagadmin", "reputacao", "bank", "trade", "auction"
         };
 
         for (String name : commands) {
@@ -358,6 +368,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void quit(PlayerQuitEvent event) {
         UUID leaving = event.getPlayer().getUniqueId();
         tagCache.remove(leaving);
+        cancelTrade(event.getPlayer(), "Um jogador saiu do servidor.");
         applyCombatLog(event.getPlayer());
         combatUntil.remove(leaving); combatOpponent.remove(leaving);
         pendingClanInput.remove(leaving);
@@ -461,6 +472,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             combatOpponent.remove(victim.getUniqueId()); combatOpponent.remove(killer.getUniqueId());
         }
 
+        combatUntil.remove(victim.getUniqueId()); combatOpponent.remove(victim.getUniqueId());
+        if (killer != null) { combatUntil.remove(killer.getUniqueId()); combatOpponent.remove(killer.getUniqueId()); }
+
         if (killer != null && !killer.equals(victim)) {
             String bountyPath = "bounties." + victim.getUniqueId();
             double bounty = getConfig().getDouble(bountyPath + ".reward", 0);
@@ -514,7 +528,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (!inCombat(quitter)) return;
         UUID opponentId = combatOpponent.get(quitter.getUniqueId()); Player opponent = opponentId == null ? null : Bukkit.getPlayer(opponentId);
         Location at = quitter.getLocation();
-        for (ItemStack item : quitter.getInventory().getContents()) if (item != null && !item.getType().isAir() && !isCompass(item)) at.getWorld().dropItemNaturally(at, item.clone());
+        for (ItemStack item : quitter.getInventory().getStorageContents()) if (item != null && !item.getType().isAir() && !isCompass(item)) at.getWorld().dropItemNaturally(at, item.clone());
         for (ItemStack item : quitter.getInventory().getArmorContents()) if (item != null && !item.getType().isAir()) at.getWorld().dropItemNaturally(at, item.clone());
         ItemStack offhand = quitter.getInventory().getItemInOffHand(); if (offhand != null && !offhand.getType().isAir() && !isCompass(offhand)) at.getWorld().dropItemNaturally(at, offhand.clone());
         quitter.getInventory().clear(); quitter.getInventory().setArmorContents(null); quitter.getInventory().setItemInOffHand(null);
@@ -589,6 +603,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String teamName = "csd" + player.getUniqueId().toString().replace("-", "").substring(0, 12);
         Team team = board.getTeam(teamName);
         if (team == null) team = board.registerNewTeam(teamName);
+        player.setScoreboard(board);
         for (String entry : new HashSet<>(team.getEntries())) team.removeEntry(entry);
         team.setPrefix(prefix.length() > 64 ? prefix.substring(0, 64) : prefix);
         team.setSuffix(rank);
@@ -715,6 +730,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         String name = plain(item.getItemMeta().getDisplayName());
 
         if (name.equals(plain(BACK_BUTTON))) {
+            if (title.equals(plain(TRADE_MENU))) { cancelTrade(p, "Troca cancelada."); return; }
+            if (title.equals(plain(AUCTION_MENU))) { openMenu(p); return; }
             if (title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))) { pendingSale.remove(p.getUniqueId()); pendingSaleSlot.remove(p.getUniqueId()); saleMenuSelections.remove(p.getUniqueId()); openShop(p); }
             else if (title.equals(plain(BOUNTY_TARGET_MENU))) openBountyMenu(p);
             else if (title.equals(plain(CLAN_INVITE_MENU)) || title.equals(plain(CLAN_BROWSER_MENU)) || title.equals(plain(CLAN_REQUESTS_MENU)) || title.equals(plain(CLAN_INVITES_MENU))) openClanMenu(p);
@@ -871,7 +888,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1330,6 +1347,178 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         if (product != null) buyProduct(p, product, 1);
     }
 
+    private void handleBankCommand(Player p, String[] args) {
+        String path = "players." + id(p) + ".bank";
+        if (args.length == 0) { msg(p, "Saldo em banco: §a$" + getConfig().getDouble(path) + " §f| Use /bank depositar <valor> ou /bank sacar <valor>."); return; }
+        if (args.length != 2) { msg(p, "Use /bank depositar <valor> ou /bank sacar <valor>."); return; }
+        try {
+            double amount = Double.parseDouble(args[1].replace(",", "."));
+            if (!Double.isFinite(amount) || amount <= 0) { msg(p, "Valor inválido."); return; }
+            double bank = getConfig().getDouble(path);
+            if (args[0].equalsIgnoreCase("depositar")) {
+                if (money(p) < amount) { msg(p, "Saldo em mãos insuficiente."); return; }
+                money(p, money(p)-amount); getConfig().set(path, bank+amount);
+            } else if (args[0].equalsIgnoreCase("sacar")) {
+                if (bank < amount) { msg(p, "Saldo bancário insuficiente."); return; }
+                getConfig().set(path, bank-amount); addMoney(p, amount);
+            } else { msg(p, "Use depositar ou sacar."); return; }
+            saveConfig(); msg(p, "Operação concluída. Banco: §a$" + getConfig().getDouble(path));
+        } catch (NumberFormatException ex) { msg(p, "Valor inválido."); }
+    }
+
+    private void handleTradeCommand(Player p, String[] args) {
+        if (args.length == 0) { msg(p, "Use /trade <jogador>, /trade aceitar ou /trade recusar."); return; }
+        if (args[0].equalsIgnoreCase("aceitar")) {
+            UUID requesterId = tradeRequests.remove(p.getUniqueId());
+            Player requester = requesterId == null ? null : Bukkit.getPlayer(requesterId);
+            if (requester == null || tradeByPlayer.containsKey(p.getUniqueId()) || tradeByPlayer.containsKey(requester.getUniqueId())) { msg(p, "Solicitação expirada ou um jogador já está em outra troca."); return; }
+            TradeSession session = new TradeSession(requester.getUniqueId(), p.getUniqueId());
+            tradeByPlayer.put(session.a, session); tradeByPlayer.put(session.b, session);
+            openTradeMenu(requester); openTradeMenu(p); msg(requester, p.getName() + " aceitou sua solicitação de troca.");
+        } else if (args[0].equalsIgnoreCase("recusar")) {
+            UUID requesterId = tradeRequests.remove(p.getUniqueId()); Player requester = requesterId == null ? null : Bukkit.getPlayer(requesterId);
+            msg(p, "Solicitação recusada."); if (requester != null) msg(requester, p.getName() + " recusou a troca.");
+        } else {
+            Player target = Bukkit.getPlayerExact(args[0]);
+            if (target == null || target.equals(p) || tradeByPlayer.containsKey(p.getUniqueId()) || tradeByPlayer.containsKey(target.getUniqueId()) || inCombat(p) || inCombat(target)) { msg(p, "Jogador indisponível para troca."); return; }
+            tradeRequests.put(target.getUniqueId(), p.getUniqueId()); msg(p, "Solicitação enviada para " + target.getName() + ".");
+            msg(target, p.getName() + " quer trocar itens com você. Use /trade aceitar ou /trade recusar.");
+        }
+    }
+
+    private void openTradeMenu(Player p) {
+        TradeSession session = tradeByPlayer.get(p.getUniqueId()); if (session == null) return;
+        UUID own = p.getUniqueId(), other = session.other(own); Player partner = Bukkit.getPlayer(other);
+        Inventory inv = Bukkit.createInventory(null, 54, TRADE_MENU);
+        List<ItemStack> ownOffer = session.offers.get(own), otherOffer = session.offers.get(other);
+        for (int i=0;i<Math.min(18,ownOffer.size());i++) inv.setItem(i, ownOffer.get(i).clone());
+        for (int i=0;i<Math.min(18,otherOffer.size());i++) inv.setItem(27+i, otherOffer.get(i).clone());
+        inv.setItem(45, button(Material.PAPER, "§e§lSEUS ITENS"));
+        inv.setItem(47, button(Material.GOLD_INGOT, "§6§lPEDIR MAIS"));
+        inv.setItem(49, button(session.accepted.contains(own) ? Material.LIME_WOOL : Material.GREEN_WOOL, session.accepted.contains(own) ? "§a§lACEITE REGISTRADO" : "§a§lACEITAR TROCA"));
+        inv.setItem(51, button(Material.PAPER, "§e§lOFERTA DE " + (partner == null ? "JOGADOR" : partner.getName())));
+        inv.setItem(53, button(Material.RED_WOOL, "§c§lRECUSAR TROCA"));
+        p.openInventory(inv);
+    }
+
+    private void giveTradeItems(Player player, List<ItemStack> items) {
+        if (player == null) return;
+        for (ItemStack item : items) {
+            Map<Integer, ItemStack> left = player.getInventory().addItem(item.clone());
+            left.values().forEach(extra -> player.getWorld().dropItemNaturally(player.getLocation(), extra));
+        }
+    }
+
+    private void cancelTrade(Player player, String reason) {
+        TradeSession session = tradeByPlayer.get(player.getUniqueId()); if (session == null) return;
+        Player a = Bukkit.getPlayer(session.a), b = Bukkit.getPlayer(session.b);
+        giveTradeItems(a, session.offers.get(session.a)); giveTradeItems(b, session.offers.get(session.b));
+        tradeByPlayer.remove(session.a); tradeByPlayer.remove(session.b);
+        if (a != null) { a.closeInventory(); msg(a, reason); }
+        if (b != null) { b.closeInventory(); msg(b, reason); }
+    }
+
+    private void finishTrade(TradeSession session) {
+        Player a = Bukkit.getPlayer(session.a), b = Bukkit.getPlayer(session.b);
+        if (a == null || b == null) { if (a != null) cancelTrade(a, "Troca cancelada: jogador desconectou."); else if (b != null) cancelTrade(b, "Troca cancelada: jogador desconectou."); return; }
+        giveTradeItems(a, session.offers.get(session.b)); giveTradeItems(b, session.offers.get(session.a));
+        tradeByPlayer.remove(session.a); tradeByPlayer.remove(session.b);
+        a.closeInventory(); b.closeInventory(); msg(a, "§aTroca concluída!"); msg(b, "§aTroca concluída!");
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void tradeInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player p) || !plain(event.getView().getTitle()).equals(plain(TRADE_MENU))) return;
+        TradeSession session = tradeByPlayer.get(p.getUniqueId()); if (session == null) { event.setCancelled(true); return; }
+        event.setCancelled(true);
+        if (event.getClickedInventory() == null) return;
+        if (event.getClickedInventory() == event.getView().getBottomInventory()) {
+            int slot = event.getSlot(); if (slot < 0 || slot >= 36) return;
+            ItemStack clicked = p.getInventory().getItem(slot); if (clicked == null || clicked.getType().isAir()) return;
+            session.offers.get(p.getUniqueId()).add(clicked.clone()); p.getInventory().setItem(slot, null);
+            session.accepted.clear(); Player other = Bukkit.getPlayer(session.other(p.getUniqueId())); if (other != null) openTradeMenu(other); openTradeMenu(p); return;
+        }
+        if (event.getClickedInventory() != event.getView().getTopInventory()) return;
+        int slot = event.getSlot();
+        if (slot >= 0 && slot < 18) {
+            List<ItemStack> offer = session.offers.get(p.getUniqueId());
+            if (slot < offer.size()) { giveTradeItems(p, List.of(offer.remove(slot))); session.accepted.clear(); Player other=Bukkit.getPlayer(session.other(p.getUniqueId())); if(other!=null)openTradeMenu(other);openTradeMenu(p); }
+            return;
+        }
+        String name = event.getCurrentItem() == null || !event.getCurrentItem().hasItemMeta() ? "" : plain(event.getCurrentItem().getItemMeta().getDisplayName());
+        if (name.equals("PEDIR MAIS")) {
+            Player other = Bukkit.getPlayer(session.other(p.getUniqueId())); session.accepted.clear();
+            if (other != null) msg(other, "§e" + p.getName() + " pediu mais itens em troca dessa oferta!");
+            openTradeMenu(p); if (other != null) openTradeMenu(other);
+        } else if (name.equals("ACEITAR TROCA")) {
+            session.accepted.add(p.getUniqueId()); Player other=Bukkit.getPlayer(session.other(p.getUniqueId()));
+            if (other != null) msg(other, "§a" + p.getName() + " aceitou a oferta.");
+            if (session.accepted.size() == 2) finishTrade(session); else openTradeMenu(p);
+        } else if (name.equals("RECUSAR TROCA")) cancelTrade(p, "Troca recusada.");
+    }
+
+    @EventHandler
+    public void tradeInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player p) || !plain(event.getView().getTitle()).equals(plain(TRADE_MENU))) return;
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (tradeByPlayer.containsKey(p.getUniqueId()) && !plain(p.getOpenInventory().getTitle()).equals(plain(TRADE_MENU))) cancelTrade(p, "Troca cancelada porque um jogador fechou o menu.");
+        });
+    }
+
+    private void handleAuctionCommand(Player p, String[] args) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("vender")) {
+            ItemStack hand = p.getInventory().getItemInMainHand();
+            if (hand == null || hand.getType().isAir() || isCompass(hand)) { msg(p, "Segure o item que deseja anunciar."); return; }
+            try {
+                double price = Double.parseDouble(args[1].replace(",", "."));
+                if (!Double.isFinite(price) || price <= 0) { msg(p, "Preço inválido."); return; }
+                String key = UUID.randomUUID().toString(); String path = "auction.listings." + key;
+                getConfig().set(path + ".owner", id(p)); getConfig().set(path + ".name", p.getName()); getConfig().set(path + ".price", price); getConfig().set(path + ".item", hand.clone());
+                p.getInventory().setItemInMainHand(null); saveConfig(); msg(p, "Item anunciado por $" + price + ". Código: " + key.substring(0,8)); openAuction(p);
+            } catch (NumberFormatException ex) { msg(p, "Use /auction vender <preço>."); }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("cancelar")) {
+            String key = findAuctionKey(args[1]); if (key == null) { msg(p, "Anúncio não encontrado."); return; }
+            String path = "auction.listings." + key;
+            if (!id(p).equals(getConfig().getString(path + ".owner"))) { msg(p, "Você só pode cancelar seus próprios anúncios."); return; }
+            ItemStack item = getConfig().getItemStack(path + ".item"); if (item != null) giveTradeItems(p, List.of(item));
+            getConfig().set(path, null); saveConfig(); msg(p, "Anúncio cancelado.");
+        } else openAuction(p);
+    }
+
+    private String findAuctionKey(String prefix) {
+        ConfigurationSection section = getConfig().getConfigurationSection("auction.listings"); if (section == null) return null;
+        for (String key : section.getKeys(false)) if (key.startsWith(prefix)) return key;
+        return null;
+    }
+
+    private void openAuction(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, AUCTION_MENU); Map<Integer,String> slots = new HashMap<>();
+        ConfigurationSection section = getConfig().getConfigurationSection("auction.listings"); int slot=0;
+        if (section != null) for (String key : section.getKeys(false)) {
+            if (slot >= 45) break; String path="auction.listings."+key; ItemStack item=getConfig().getItemStack(path+".item");
+            if (item == null) continue; ItemStack display=item.clone(); ItemMeta meta=display.getItemMeta();
+            List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
+            lore.add("§7Vendedor: §f"+getConfig().getString(path+".name","Desconhecido")); lore.add("§7Preço: §a$"+getConfig().getDouble(path+".price")); lore.add("§8ID: "+key.substring(0,8)); lore.add("§eClique para comprar");
+            meta.setLore(lore); display.setItemMeta(meta); inv.setItem(slot,display); slots.put(slot,key); slot++;
+        }
+        auctionSlots.put(p.getUniqueId(),slots); inv.setItem(49,button(Material.BARRIER,BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void auctionInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player p) || !plain(event.getView().getTitle()).equals(plain(AUCTION_MENU))) return;
+        event.setCancelled(true); if (event.getClickedInventory()!=event.getView().getTopInventory()) return;
+        String key=auctionSlots.getOrDefault(p.getUniqueId(),Map.of()).get(event.getSlot()); if(key==null)return;
+        String path="auction.listings."+key; String owner=getConfig().getString(path+".owner");
+        if (owner==null || owner.equals(id(p))) { msg(p,"Você não pode comprar seu próprio anúncio."); return; }
+        double price=getConfig().getDouble(path+".price"); if(money(p)<price){msg(p,"Saldo insuficiente.");return;}
+        ItemStack item=getConfig().getItemStack(path+".item"); if(item==null){getConfig().set(path,null);saveConfig();openAuction(p);return;}
+        if(p.getInventory().firstEmpty()==-1){msg(p,"Libere espaço no inventário antes de comprar.");return;}
+        money(p,money(p)-price); getConfig().set("players."+owner+".money",getConfig().getDouble("players."+owner+".money",100)+price);
+        Player seller=Bukkit.getPlayer(UUID.fromString(owner)); if(seller!=null)msg(seller,"§aSeu anúncio foi vendido por $"+price+".");
+        p.getInventory().addItem(item); getConfig().set(path,null); saveConfig(); msg(p,"§aCompra realizada!"); openAuction(p);
+    }
+
     @Override
     public boolean onCommand(
             CommandSender sender,
@@ -1619,6 +1808,9 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
             }
 
+            case "bank" -> handleBankCommand(p, args);
+            case "trade" -> handleTradeCommand(p, args);
+            case "auction" -> handleAuctionCommand(p, args);
             case "tagadmin" -> {
                 if (!sender.hasPermission("csdprbsmc.admin")) { sender.sendMessage("Você não tem permissão."); return true; }
                 if (args.length < 2) { sender.sendMessage("Use /tagadmin <jogador> <tag...> ou /tagadmin <jogador> reset"); return true; }
