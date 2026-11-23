@@ -28,11 +28,9 @@ import net.kyori.adventure.text.event.ClickEvent;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 import java.time.LocalDate;
 import java.time.DayOfWeek;
 import java.util.concurrent.ThreadLocalRandom;
-import java.lang.reflect.Method;
 
 public final class CsdprbsMcEssentials extends JavaPlugin
         implements Listener, CommandExecutor {
@@ -68,8 +66,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private Location activeTreasure;
 
     private NamespacedKey compassKey;
-    private Object bedrockMenus;
-    private String floodgatePrefix = ".";
 
     private static final String MENU = "§6§lCSDPRBSMC";
     private static final String SHOP = "§e§lLOJA";
@@ -278,48 +274,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveConfig();
     }
 
-    private void initializeBedrockMenus() {
-        org.bukkit.plugin.Plugin floodgate = Bukkit.getPluginManager().getPlugin("floodgate");
-        if (floodgate == null) {
-            for (org.bukkit.plugin.Plugin installed : Bukkit.getPluginManager().getPlugins()) {
-                if (installed.getName().equalsIgnoreCase("floodgate")) {
-                    floodgate = installed;
-                    break;
-                }
-            }
-        }
-        if (floodgate == null || !floodgate.isEnabled()) {
-            bedrockMenus = null;
-            getLogger().warning("Floodgate não está ativo. Jogadores Bedrock usarão o menu de inventário; instale/ative o Floodgate para abrir formulários.");
-            return;
-        }
-        try {
-            if (floodgate instanceof JavaPlugin floodgatePlugin) {
-                floodgatePrefix = floodgatePlugin.getConfig().getString("username-prefix", ".");
-            }
-            Class<?> type = Class.forName("com.csdprbsmc.essentials.BedrockMenus");
-            Object bridge = type.getConstructor().newInstance();
-            type.getMethod("isBedrock", Player.class);
-            type.getMethod("openSelection", Player.class, String.class, String.class, List.class, Consumer.class);
-            bedrockMenus = bridge;
-            getLogger().info("Integração de formulários Bedrock ativada via Floodgate.");
-        } catch (Throwable error) {
-            bedrockMenus = null;
-            getLogger().severe("Floodgate está ativo, mas a integração de formulários falhou: " + error.getClass().getName() + ": " + error.getMessage());
-        }
-    }
-
-    private Object invokeBedrock(String method, Class<?>[] types, Object... args) {
-        if (bedrockMenus == null) return null;
-        try {
-            Method target = bedrockMenus.getClass().getMethod(method, types);
-            return target.invoke(bedrockMenus, args);
-        } catch (Throwable error) {
-            getLogger().warning("Falha na integração Bedrock (" + method + "): " + error.getClass().getSimpleName());
-            return null;
-        }
-    }
-
     private void handleMainMenuChoice(Player p, int choice) {
         switch (choice) {
             case 0 -> openTpaMenu(p);
@@ -334,30 +288,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             case 9 -> openTreasureMenu(p);
             case 10 -> teleportBack(p);
             default -> { }
-        }
-    }
-
-    private void openMainForm(Player p) {
-        List<String> choices = List.of("TPA", "HOME", "WARPS", "CLANS", "RANKINGS", "LOJA / ECONOMIA", "MISSÕES", "PROCURADOS", "CONTRATOS", "TESOUROS", "BACK - LOCAL DA MORTE");
-        if (!isBedrock(p)) {
-            openInventoryMainMenu(p);
-            return;
-        }
-        if (!openBedrockSelection(p, "CSDPRBSMC ESSENTIALS", "Escolha uma opção:", choices, choice -> handleMainMenuChoice(p, choice))) {
-            msg(p, "Não foi possível abrir o formulário Bedrock. Voltando ao menu de inventário.");
-            openInventoryMainMenu(p);
-        }
-    }
-
-    private boolean openBedrockSelection(Player p, String title, String content, List<String> labels, Consumer<Integer> callback) {
-        if (bedrockMenus == null) return false;
-        try {
-            Method target = bedrockMenus.getClass().getMethod("openSelection", Player.class, String.class, String.class, List.class, Consumer.class);
-            target.invoke(bedrockMenus, p, title, content, labels, callback);
-            return true;
-        } catch (Throwable error) {
-            getLogger().warning("Falha ao abrir formulário Bedrock: " + error.getClass().getSimpleName() + ": " + error.getMessage());
-            return false;
         }
     }
 
@@ -553,13 +483,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveConfig();
         msg(victim, "§eSeu local de morte foi salvo! Use §aBACK §ena bússola para voltar em até 30 minutos.");
         event.getDrops().removeIf(this::isCompass);
-    }
-
-    private boolean isBedrock(Player p) {
-        Object result = invokeBedrock("isBedrock", new Class<?>[]{Player.class}, p);
-        if (result instanceof Boolean value && value) return true;
-        return floodgatePrefix != null && !floodgatePrefix.isEmpty()
-                && p.getName().startsWith(floodgatePrefix);
     }
 
     private String memberTag() { return "§6§l[§e§lMEMBRO§6§l]"; }
