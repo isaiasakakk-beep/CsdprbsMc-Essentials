@@ -939,7 +939,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(TRADE_TARGET_MENU) || title.equals(TRADE_REQUEST_MENU) || title.equals(BANK_MENU) || title.equals(AUCTION_ITEM_MENU) || title.equals(AUCTION_PRICE_MENU) || title.equals(TRADE_MENU) || title.equals(AUCTION_MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -1625,16 +1625,86 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             lore.add("§7Vendedor: §f"+getConfig().getString(path+".name","Desconhecido")); lore.add("§7Preço: §a$"+getConfig().getDouble(path+".price")); lore.add("§8ID: "+key.substring(0,8)); lore.add("§eClique para comprar");
             meta.setLore(lore); display.setItemMeta(meta); inv.setItem(slot,display); slots.put(slot,key); slot++;
         }
-        auctionSlots.put(p.getUniqueId(),slots); inv.setItem(49,button(Material.BARRIER,BACK_BUTTON)); p.openInventory(inv);
+        auctionSlots.put(p.getUniqueId(),slots);
+        inv.setItem(45,button(Material.GOLD_INGOT,"§a§lANUNCIAR ITEM"));
+        inv.setItem(49,button(Material.BARRIER,BACK_BUTTON)); p.openInventory(inv);
+    }
+
+    private void openAuctionItemMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, AUCTION_ITEM_MENU);
+        Map<Integer,Integer> slots = new HashMap<>();
+        for (int source=0; source<36; source++) {
+            ItemStack item = p.getInventory().getItem(source);
+            if (item == null || item.getType().isAir() || isCompass(item)) continue;
+            ItemStack display = item.clone();
+            ItemMeta meta = display.getItemMeta();
+            List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+            lore.add("§aClique para anunciar esta pilha");
+            meta.setLore(lore); display.setItemMeta(meta);
+            int target=slots.size(); if(target>=45) break;
+            inv.setItem(target,display); slots.put(target,source);
+        }
+        auctionItemSlots.put(p.getUniqueId(),slots);
+        inv.setItem(49,button(Material.BARRIER,BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    private void openAuctionPriceMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, AUCTION_PRICE_MENU);
+        double[] prices={10,50,100,250,500,1000,5000}; int[] slots={10,11,12,13,14,15,16};
+        for(int i=0;i<prices.length;i++) inv.setItem(slots[i],button(Material.GOLD_INGOT,"§ePREÇO: "+(long)prices[i]));
+        inv.setItem(22,button(Material.BARRIER,BACK_BUTTON));
+        p.openInventory(inv);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void auctionItemSelectionClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player p)) return;
+        String title=plain(event.getView().getTitle());
+        if(title.equals(plain(AUCTION_ITEM_MENU))) {
+            event.setCancelled(true);
+            if(event.getClickedInventory()!=event.getView().getTopInventory()) return;
+            Integer source=auctionItemSlots.getOrDefault(p.getUniqueId(),Map.of()).get(event.getSlot());
+            if(source==null) return;
+            ItemStack original=p.getInventory().getItem(source);
+            if(original==null||original.getType().isAir()||isCompass(original)){msg(p,"Esse item não está mais disponível.");openAuctionItemMenu(p);return;}
+            pendingAuction.put(p.getUniqueId(),new AuctionSelection(source,original.clone()));
+            openAuctionPriceMenu(p);
+        } else if(title.equals(plain(AUCTION_PRICE_MENU))) {
+            event.setCancelled(true);
+            if(event.getClickedInventory()!=event.getView().getTopInventory()) return;
+            ItemStack clicked=event.getCurrentItem();
+            if(clicked==null||!clicked.hasItemMeta()||!clicked.getItemMeta().hasDisplayName()) return;
+            String label=plain(clicked.getItemMeta().getDisplayName()); if(!label.startsWith("PREÇO: ")) return;
+            double price; try{price=Double.parseDouble(label.substring(7));}catch(NumberFormatException ex){return;}
+            AuctionSelection selection=pendingAuction.remove(p.getUniqueId());
+            if(selection==null){msg(p,"Seleção expirada. Escolha o item novamente.");openAuctionItemMenu(p);return;}
+            ItemStack current=p.getInventory().getItem(selection.sourceSlot());
+            if(current==null||!current.isSimilar(selection.item())||current.getAmount()<selection.item().getAmount()){
+                msg(p,"Seu inventário mudou. O anúncio foi cancelado.");openAuctionItemMenu(p);return;
+            }
+            p.getInventory().setItem(selection.sourceSlot(),null);
+            String key=UUID.randomUUID().toString(), listingPath="auction.listings."+key;
+            getConfig().set(listingPath+".owner",id(p)); getConfig().set(listingPath+".name",p.getName());
+            getConfig().set(listingPath+".price",price); getConfig().set(listingPath+".item",selection.item().clone());
+            saveConfig(); msg(p,"§aAnúncio criado por $"+price+"!"); openAuction(p);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void auctionInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player p) || !plain(event.getView().getTitle()).equals(plain(AUCTION_MENU))) return;
         event.setCancelled(true); if (event.getClickedInventory()!=event.getView().getTopInventory()) return;
+        if (event.getSlot()==45) { openAuctionItemMenu(p); return; }
         String key=auctionSlots.getOrDefault(p.getUniqueId(),Map.of()).get(event.getSlot()); if(key==null)return;
         String path="auction.listings."+key; String owner=getConfig().getString(path+".owner");
-        if (owner==null || owner.equals(id(p))) { msg(p,"Você não pode comprar seu próprio anúncio."); return; }
+        if (owner==null) { openAuction(p); return; }
+        if (owner.equals(id(p))) {
+            ItemStack ownItem=getConfig().getItemStack(path+".item");
+            if(ownItem!=null) giveTradeItems(p,List.of(ownItem));
+            getConfig().set(path,null); saveConfig();
+            msg(p,"§eSeu anúncio foi cancelado e o item foi devolvido."); openAuction(p); return;
+        }
         double price=getConfig().getDouble(path+".price"); if(money(p)<price){msg(p,"Saldo insuficiente.");return;}
         ItemStack item=getConfig().getItemStack(path+".item"); if(item==null){getConfig().set(path,null);saveConfig();openAuction(p);return;}
         if(p.getInventory().firstEmpty()==-1){msg(p,"Libere espaço no inventário antes de comprar.");return;}
