@@ -9,6 +9,8 @@ import org.bukkit.event.*;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.*;
@@ -82,6 +84,10 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     private static final String SHOP_CATEGORIES = "§e§lLOJA - CATEGORIAS";
     private static final String SHOP_CATEGORY_PREFIX = "§e§lLOJA: ";
     private final Map<UUID, Integer> shopPages = new HashMap<>();
+    private final Map<UUID, Long> combatUntil = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> combatOpponent = new ConcurrentHashMap<>();
+    private final Map<UUID, String> pendingShopSearch = new ConcurrentHashMap<>();
+    private static final String SHOP_SEARCH_MENU = "§e§lPESQUISA DA LOJA";
     private static final String BACK_BUTTON = "§c§lVOLTAR";
     private record ShopProduct(Material material, String name, double price, String category, boolean limited) {}
     private record SaleSelection(int sourceSlot, ItemStack item) {}
@@ -243,7 +249,6 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         saveDefaultConfig();
 
         compassKey = new NamespacedKey(this, "main_compass");
-        initializeBedrockMenus();
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
@@ -252,7 +257,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 "sethome", "home", "delhome",
                 "setwarp", "warp", "delwarp",
                 "clan", "bal", "pay", "shop",
-                "topmoney", "topkills", "setmoney"
+                "topmoney", "topkills", "setmoney", "tagadmin", "reputacao"
         };
 
         for (String name : commands) {
@@ -263,6 +268,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         }
 
         getServer().getScheduler().runTaskTimer(this, this::spawnTreasure, 20L * 60 * 30, 20L * 60 * 30);
+        getServer().getScheduler().runTaskTimer(this, this::updateCombatTimers, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, this::saveConfig, 20L * 60 * 5, 20L * 60 * 5);
         getLogger().info("CsdprbsMc Essentials iniciado! Loja carregada com " + SHOP_PRODUCTS.size() + " itens.");
     }
@@ -422,6 +428,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     public void quit(PlayerQuitEvent event) {
         UUID leaving = event.getPlayer().getUniqueId();
         tagCache.remove(leaving);
+        applyCombatLog(event.getPlayer());
+        combatUntil.remove(leaving); combatOpponent.remove(leaving);
         pendingClanInput.remove(leaving);
         selectedHomes.remove(leaving);
         pendingSale.remove(leaving);
@@ -445,6 +453,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         Player p = event.getPlayer();
 
         Bukkit.getScheduler().runTask(this, () -> {
+            p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
             giveCompass(p);
             updatePlayerTag(p);
 
@@ -514,6 +523,12 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             addMoney(killer, 10);
             refreshPlayerTags();
             msg(killer, "Você ganhou §a$10 §fe uma kill!");
+            double stolen = money(victim); money(victim, 0);
+            if (stolen > 0) { addMoney(killer, stolen); msg(killer, "Você roubou §a$" + stolen + " de " + victim.getName() + "."); }
+            addReputation(killer, 1); addReputation(victim, -1);
+            msg(victim, "§cVocê morreu! Você perdeu seu dinheiro roubado por " + killer.getName() + ". Tente recuperá-lo matando ela de volta!");
+            combatUntil.remove(victim.getUniqueId()); combatUntil.remove(killer.getUniqueId());
+            combatOpponent.remove(victim.getUniqueId()); combatOpponent.remove(killer.getUniqueId());
         }
 
         if (killer != null && !killer.equals(victim)) {
@@ -547,22 +562,78 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 && p.getName().startsWith(floodgatePrefix);
     }
 
-    private String memberTag() {
-        return "§e[MEMBRO]";
+    private String memberTag() { return "§6§l[§e§lMEMBRO§6§l]"; }
+
+    private void addReputation(Player player, int amount) {
+        String path = "players." + id(player) + ".reputation";
+        getConfig().set(path, getConfig().getInt(path) + amount); saveConfig();
+    }
+    private boolean inCombat(Player player) {
+        Long until = combatUntil.get(player.getUniqueId()); return until != null && until > System.currentTimeMillis();
+    }
+    private void startCombat(Player a, Player b) {
+        long expiry = System.currentTimeMillis() + 15_000L;
+        boolean newA = !inCombat(a), newB = !inCombat(b);
+        combatUntil.put(a.getUniqueId(), expiry); combatUntil.put(b.getUniqueId(), expiry);
+        combatOpponent.put(a.getUniqueId(), b.getUniqueId()); combatOpponent.put(b.getUniqueId(), a.getUniqueId());
+        if (newA) { msg(a, "§c§lVocê está em PvP! Fugir resultará em derrota e perda dos itens."); a.sendTitle("§c§lEM COMBATE", "§fNão fuja!", 5, 35, 10); }
+        if (newB) { msg(b, "§c§lVocê está em PvP! Fugir resultará em derrota e perda dos itens."); b.sendTitle("§c§lEM COMBATE", "§fNão fuja!", 5, 35, 10); }
+    }
+    private void updateCombatTimers() {
+        long now = System.currentTimeMillis();
+        for (UUID uuid : new HashSet<>(combatUntil.keySet())) {
+            Long until = combatUntil.get(uuid); if (until == null) continue;
+            if (until <= now) { combatUntil.remove(uuid); combatOpponent.remove(uuid); Player p = Bukkit.getPlayer(uuid); if (p != null) msg(p, "§aVocê saiu de combate."); }
+            else { Player p = Bukkit.getPlayer(uuid); if (p != null) p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§cEm combate: §f" + Math.max(1, (until-now+999)/1000) + "s")); }
+        }
+    }
+    private void applyCombatLog(Player quitter) {
+        if (!inCombat(quitter)) return;
+        UUID opponentId = combatOpponent.get(quitter.getUniqueId()); Player opponent = opponentId == null ? null : Bukkit.getPlayer(opponentId);
+        Location at = quitter.getLocation();
+        for (ItemStack item : quitter.getInventory().getContents()) if (item != null && !item.getType().isAir() && !isCompass(item)) at.getWorld().dropItemNaturally(at, item.clone());
+        for (ItemStack item : quitter.getInventory().getArmorContents()) if (item != null && !item.getType().isAir()) at.getWorld().dropItemNaturally(at, item.clone());
+        ItemStack offhand = quitter.getInventory().getItemInOffHand(); if (offhand != null && !offhand.getType().isAir() && !isCompass(offhand)) at.getWorld().dropItemNaturally(at, offhand.clone());
+        quitter.getInventory().clear(); quitter.getInventory().setArmorContents(null); quitter.getInventory().setItemInOffHand(null);
+        if (opponent != null) {
+            double stolen = money(quitter); money(quitter, 0); if (stolen > 0) addMoney(opponent, stolen);
+            String kp = "players." + id(opponent) + ".kills"; getConfig().set(kp, getConfig().getInt(kp) + 1);
+            addReputation(opponent, 1); addReputation(quitter, -1);
+            msg(opponent, "§a" + quitter.getName() + " fugiu do combate! Você venceu e recebeu os itens e $" + stolen + ".");
+        }
+        Bukkit.broadcastMessage("§c" + quitter.getName() + " abandonou um combate e perdeu os itens!");
+    }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void trackCombat(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        Player attacker = null;
+        if (event.getDamager() instanceof Player direct) attacker = direct;
+        else if (event.getDamager() instanceof org.bukkit.entity.Projectile projectile && projectile.getShooter() instanceof Player shooter) attacker = shooter;
+        if (attacker != null && !attacker.equals(victim)) startCombat(attacker, victim);
+    }
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void blockCombatTeleports(PlayerTeleportEvent event) {
+        if (!inCombat(event.getPlayer())) return;
+        PlayerTeleportEvent.TeleportCause cause = event.getCause();
+        if (cause == PlayerTeleportEvent.TeleportCause.PLUGIN || cause == PlayerTeleportEvent.TeleportCause.COMMAND || cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL || cause == PlayerTeleportEvent.TeleportCause.CHORUS_FRUIT || cause == PlayerTeleportEvent.TeleportCause.SPECTATE) {
+            event.setCancelled(true); msg(event.getPlayer(), "§cVocê não pode fugir por teleporte enquanto estiver em combate!");
+        }
     }
 
     private String playerTag(Player player) {
+        String custom = getConfig().getString("players." + id(player) + ".customTag");
+        String member = custom == null ? memberTag() : org.bukkit.ChatColor.translateAlternateColorCodes('&', custom);
         String clan = getConfig().getString("players." + id(player) + ".clan");
         String clanTag = "";
         if (clan != null) {
             String first = getConfig().getString("clans." + clan + ".color1", "§f");
             String second = getConfig().getString("clans." + clan + ".color2", first);
             String upper = clan.toUpperCase(Locale.ROOT);
-            StringBuilder styled = new StringBuilder(" §l[");
-            for (int i = 0; i < upper.length(); i++) styled.append(i % 2 == 0 ? first : second).append(upper.charAt(i));
-            clanTag = styled.append("]").toString();
+            StringBuilder styled = new StringBuilder(" §6§l[");
+            for (int i = 0; i < upper.length(); i++) styled.append("§l").append(i % 2 == 0 ? first : second).append(upper.charAt(i));
+            clanTag = styled.append("§6§l]").toString();
         }
-        return memberTag() + clanTag;
+        return member + clanTag;
     }
 
     private int rankOf(Player player, String stat) {
@@ -611,6 +682,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void formatChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
+        String shopSearch = pendingShopSearch.remove(source.getUniqueId());
+        if (shopSearch != null) {
+            String query = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            event.setCancelled(true); Bukkit.getScheduler().runTask(this, () -> openShopSearchResults(source, query)); return;
+        }
         String bountyTarget = pendingBountyTarget.remove(source.getUniqueId());
         if (bountyTarget != null) {
             String amountText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
@@ -636,12 +712,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void openMenu(Player p) {
-        // Java mantém o inventário clássico; somente Bedrock recebe o formulário Cumulus.
-        if (isBedrock(p)) {
-            openMainForm(p);
-        } else {
-            openInventoryMainMenu(p);
-        }
+        if (inCombat(p)) { msg(p, "§cVocê não pode usar a bússola durante o combate!"); return; }
+        openInventoryMainMenu(p);
     }
 
     private void openInventoryMainMenu(Player p) {
@@ -702,7 +774,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         boolean sellingMenu = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY));
         if (sellingMenu && event.getClickedInventory() != event.getView().getTopInventory()) { event.setCancelled(true); return; }
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
-        boolean managed = title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
+        boolean managed = title.equals(plain(SHOP_SEARCH_MENU)) || title.equals(plain(SELL_SELECT)) || title.equals(plain(SELL_CONFIRM)) || title.equals(plain(SELL_QUANTITY))
                 || title.equals(plain(CLAN_COLORS)) || title.equals(plain(MISSIONS)) || title.equals(plain(WEEKLY_MISSIONS)) || title.equals(plain(SPECIFIC_MISSIONS))
                 || title.equals(plain(MENU)) || title.equals(plain(TPA_MENU))
                 || title.equals(plain(TPA_REQUEST_MENU)) || title.equals(plain(HOME_MENU))
@@ -814,8 +886,11 @@ public final class CsdprbsMcEssentials extends JavaPlugin
             }
         } else if (title.equals(plain(WARP_MENU))) {
             teleportWarp(p, name);
+        } else if (title.equals(plain(SHOP_SEARCH_MENU))) {
+            ShopProduct product = findProduct(name); if (product != null) buyProduct(p, product, event.isShiftClick() ? 16 : 1);
         } else if (title.equals(plain(SHOP_CATEGORIES))) {
-            openShopCategory(p, name);
+            if (name.equals("PESQUISAR ITEM")) { pendingShopSearch.put(p.getUniqueId(), "shop"); p.closeInventory(); msg(p, "Digite o nome do item que deseja pesquisar na loja."); }
+            else openShopCategory(p, name);
         } else if (title.startsWith(plain(SHOP_CATEGORY_PREFIX))) {
             String categoryPage = title.substring(plain(SHOP_CATEGORY_PREFIX).length());
             int marker = categoryPage.lastIndexOf(" #");
@@ -873,7 +948,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     @EventHandler
     public void menuDrag(InventoryDragEvent event) {
         String title = event.getView().getTitle();
-        if (title.equals(MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
+        if (title.equals(MENU) || title.equals(SHOP_SEARCH_MENU) || title.equals(SHOP) || title.equals(CLANS) || title.equals(CLAN_INVITE_MENU) || title.equals(CLAN_BROWSER_MENU) || title.equals(CLAN_REQUESTS_MENU) || title.equals(CLAN_INVITES_MENU) || title.equals(BOUNTY_MENU) || title.equals(BOUNTY_TARGET_MENU) || title.equals(CONTRACT_MENU) || title.equals(TREASURE_MENU) || title.equals(SELL_SELECT) || title.equals(SELL_CONFIRM) || title.equals(SELL_QUANTITY) || title.equals(CLAN_COLORS) || title.equals(MISSIONS)
                 || title.equals(TPA_MENU) || title.equals(TPA_REQUEST_MENU)
                 || title.equals(HOME_MENU) || title.equals(HOME_ACTION_MENU)
                 || title.equals(WARP_MENU) || title.equals(SHOP_CATEGORIES)
@@ -952,6 +1027,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void teleportHome(Player p,String home) {
+        if (inCombat(p)) { msg(p, "§cVocê não pode usar HOME durante o combate!"); return; }
         Location loc=getConfig().getLocation("players."+id(p)+".homes."+home);
         if(loc==null){msg(p,"Home não encontrada.");return;}
         p.teleport(loc); msg(p,"Teleportado para "+home+"."); p.closeInventory();
@@ -966,6 +1042,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void teleportWarp(Player p,String warp) {
+        if (inCombat(p)) { msg(p, "§cVocê não pode usar WARPS durante o combate!"); return; }
         Location loc=getConfig().getLocation("warps."+warp); if(loc==null){msg(p,"Warp não encontrada.");return;}
         p.teleport(loc);msg(p,"Teleportado para "+warp+".");p.closeInventory();
     }
@@ -976,6 +1053,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 Material.IRON_SWORD, Material.NETHERRACK, Material.PAINTING, Material.CHEST, Material.NETHER_STAR, Material.BARREL};
         int[] slots = {10,11,12,13,14,15,16,19,20,21,22,23};
         for (int i = 0; i < SHOP_CATEGORIES_LIST.size(); i++) inv.setItem(slots[i], button(icons[i], "§e§l" + SHOP_CATEGORIES_LIST.get(i)));
+        inv.setItem(25, button(Material.NAME_TAG, "§e§lPESQUISAR ITEM"));
         inv.setItem(31, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
     }
 
@@ -1003,7 +1081,16 @@ public final class CsdprbsMcEssentials extends JavaPlugin
         p.openInventory(inv);
     }
 
-    private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equals(name)).findFirst().orElse(null);}
+    private ShopProduct findProduct(String name){return SHOP_PRODUCTS.stream().filter(product->product.name().equalsIgnoreCase(name)).findFirst().orElse(null);}
+    private void openShopSearchResults(Player p, String query) {
+        if (query == null || query.isBlank()) { msg(p, "Pesquisa vazia."); openShop(p); return; }
+        String normalized = query.toLowerCase(Locale.ROOT);
+        List<ShopProduct> matches = SHOP_PRODUCTS.stream().filter(product -> product.name().toLowerCase(Locale.ROOT).contains(normalized) || product.material().name().toLowerCase(Locale.ROOT).contains(normalized)).limit(45).toList();
+        Inventory inv = Bukkit.createInventory(null, 54, SHOP_SEARCH_MENU);
+        for (int i=0;i<matches.size();i++) { ShopProduct product=matches.get(i); ItemStack item=new ItemStack(product.material()); ItemMeta meta=item.getItemMeta(); meta.setDisplayName("§f§l"+product.name()); meta.setLore(List.of("§7Preço: §a$"+product.price(),"§eClique para comprar 1","§eShift + clique para comprar 16")); item.setItemMeta(meta); inv.setItem(i,item); }
+        inv.setItem(49, button(Material.BARRIER, BACK_BUTTON)); p.openInventory(inv);
+        if (matches.isEmpty()) msg(p, "Nenhum item encontrado para: " + query);
+    }
 
     private void buyProduct(Player p, ShopProduct product, int amount) {
         if (product == null || amount < 1) return;
@@ -1166,6 +1253,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void sendTpa(Player p, Player target, boolean targetComesToRequester) {
+        if (inCombat(p) || (target != null && inCombat(target))) { msg(p, "§cNão é possível solicitar TPA durante um combate."); return; }
         if (target == null || target.equals(p) || !target.isOnline()) { msg(p, "Jogador inválido."); return; }
         tpa.put(target.getUniqueId(), p.getUniqueId());
         tpaCreated.put(target.getUniqueId(), System.currentTimeMillis());
@@ -1343,7 +1431,8 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 } else openMenu(p);
             }
 
-            case "bal" -> msg(p, "Seu saldo: §a$" + money(p));
+            case "bal" -> msg(p, "Seu saldo: §a$" + money(p) + " §f| Reputação: §e" + getConfig().getInt("players." + id(p) + ".reputation"));
+            case "reputacao" -> msg(p, "Sua reputação: §e" + getConfig().getInt("players." + id(p) + ".reputation"));
 
             case "tpa" -> {
                 if (args.length != 1) {
@@ -1607,6 +1696,14 @@ public final class CsdprbsMcEssentials extends JavaPlugin
                 }
             }
 
+            case "tagadmin" -> {
+                if (!sender.hasPermission("csdprbsmc.admin")) { sender.sendMessage("Você não tem permissão."); return true; }
+                if (args.length < 2) { sender.sendMessage("Use /tagadmin <jogador> <tag...> ou /tagadmin <jogador> reset"); return true; }
+                OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]); String tagPath = "players." + target.getUniqueId() + ".customTag";
+                if (args[1].equalsIgnoreCase("reset")) getConfig().set(tagPath, null);
+                else { String raw = String.join(" ", Arrays.copyOfRange(args, 1, args.length)); if (raw.length() > 32 || raw.contains("\n") || raw.contains("\r")) { sender.sendMessage("Tag inválida: máximo 32 caracteres."); return true; } getConfig().set(tagPath, raw.replace('§', '&')); }
+                getConfig().set("players." + target.getUniqueId() + ".name", args[0]); saveConfig(); Player online = target.getPlayer(); if (online != null) updatePlayerTag(online); sender.sendMessage("Tag atualizada para " + args[0] + ".");
+            }
             case "clan" -> clanCommand(p, args);
         }
 
@@ -1764,6 +1861,7 @@ public final class CsdprbsMcEssentials extends JavaPlugin
     }
 
     private void teleportBack(Player p) {
+        if (inCombat(p)) { msg(p, "§cVocê não pode usar BACK durante o combate!"); return; }
         String path = "death-back." + id(p);
         long timestamp = getConfig().getLong(path + ".time", 0);
         if (timestamp == 0 || timestamp < System.currentTimeMillis() - 30L * 60 * 1000) {
